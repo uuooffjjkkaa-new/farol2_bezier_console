@@ -61,6 +61,8 @@
 
             <div><button type="button" onclick="runOptimization()">Run Optimization</button></div>
             <div><button type="button" onclick="cancelOptimization()">Cancel Optimization</button></div>
+            <div><button type="button" onclick="startCPFForSelectedVehicles()">Start CPF</button></div>
+            <div><button type="button" onclick="stopCPFForSelectedVehicles()">Stop CPF</button></div>
             <div><button type="button" onclick="deployMissionWithProgress()">Deploy Mission</button></div>
           </div>
 
@@ -195,18 +197,27 @@
       console.log("ROS topics:", topics);
     });
     // Keep track of the previous vehicle list
-    const rosRemote = new ROSLIB.Ros({ url: 'ws://10.16.145.37:9090' });
+    const rosRemote = new ROSLIB.Ros({ url: 'ws://192.168.1.32:9090' });
 
     rosRemote.on('connection', () => {
-      document.getElementById('log').innerHTML += '<p>Connected to remote ROS at 10.16.145.37</p>';
+      document.getElementById('log').innerHTML += '<p>Connected to remote ROS at 10.16.145.30</p>';
     });
     rosRemote.on('error', (error) => { console.error("Remote ROS error:", error); });
+
+    // Keep track of the previous vehicle list
+    const rosRemote2 = new ROSLIB.Ros({ url: 'ws://myellow:10111' });
+
+    rosRemote2.on('connection', () => {
+      document.getElementById('log').innerHTML += '<p>Connected to remote ROS at 10.16.145.13</p>';
+    });
+    rosRemote2.on('error', (error) => { console.error("Remote ROS error:", error); });
 
     
     buildVehicleListFromTopics(rosLocal);
     buildVehicleListFromTopics(rosRemote);
+    buildVehicleListFromTopics(rosRemote2);
     
-    const rosConnections = [rosLocal, rosRemote]; // add as many as you want
+    const rosConnections = [rosLocal, rosRemote, rosRemote2]; // add as many as you want
     
     let knownVehicles = [];
     // Start polling every 2 seconds
@@ -259,7 +270,7 @@
     const obstacleIds = [];
     let nextObstacleId = 0;  // Tracks the next ID to assign
     const obstacleImg = new Image();
-    obstacleImg.src = "rock.png";
+    obstacleImg.src = "island_circ.png";
 
 
 
@@ -497,8 +508,7 @@
     function deployMissionWithProgress() {
       const selectedVehicles = getSelectedVehicles(); // Vehicles checked in the UI
       if (!selectedVehicles || selectedVehicles.length === 0) return;
-
-      isExecutingMission = true;
+                                 isExecutingMission = true;
 
       // Reset execution samples for selected vehicles
       for (const vehicleId of selectedVehicles) {
@@ -509,41 +519,33 @@
 
       rosConnections.forEach(ros => {
         selectedVehicles.forEach(vehicle => {
-          // Start CPF service on this master
-          const startService = new ROSLIB.Service({
-            ros: ros,
-            name: `/${vehicle}/CPFStart`,
-            serviceType: 'cpf_control/StartStop'
+          
+          // Once all vehicles are started, deploy missions
+          subscribeExecutionProgress(selectedVehicles);
+
+          // Publish missions directly from stored mission strings
+          selectedVehicles.forEach(name => {
+            if (missionTopics_addons[ros.url][name] && missionStrings[name]) {
+
+              // ---- LOG mission topic and string before publishing ----
+              console.log(`About to publish mission for ${name}:`);
+              console.log(`ROS connection URL: ${ros.url}`);
+              console.log(`Mission topic object:`, missionTopics_addons[ros.url][name]);
+              console.log(`Mission string content:`, missionStrings[name]);
+
+              const msg = new ROSLIB.Message({
+                data: missionStrings[name]
+              });
+              missionTopics_addons[ros.url][name].publish(msg);
+
+              console.log(`Mission published for ${name} on ROS ${ros.url}`);
+            } else {
+              console.warn(`No mission available for ${name} or mission topic not initialized`);
+            }
           });
 
-          startService.callService(new ROSLIB.ServiceRequest(), () => {
-
-            // Once all vehicles are started, deploy missions
-            subscribeExecutionProgress(selectedVehicles);
-
-            // Publish missions directly from stored mission strings
-            selectedVehicles.forEach(name => {
-              if (missionTopics_addons[ros.url][name] && missionStrings[name]) {
-
-                // ---- LOG mission topic and string before publishing ----
-                console.log(`About to publish mission for ${name}:`);
-                console.log(`ROS connection URL: ${ros.url}`);
-                console.log(`Mission topic object:`, missionTopics_addons[ros.url][name]);
-                console.log(`Mission string content:`, missionStrings[name]);
-
-                const msg = new ROSLIB.Message({
-                  data: missionStrings[name]
-                });
-                missionTopics_addons[ros.url][name].publish(msg);
-
-                console.log(`Mission published for ${name} on ROS ${ros.url}`);
-              } else {
-                console.warn(`No mission available for ${name} or mission topic not initialized`);
-              }
-            });
-
-            setStage("stageExecuting", "running");
-          });
+          setStage("stageExecuting", "running");
+        
         });
       });
     }
@@ -583,19 +585,6 @@
             setStage("stageExecuting", "completed");
             isExecutingMission = false;
 
-            // Stop CPF for ALL vehicles
-            activeVehicles.forEach(vehicle => {
-              const stopService = new ROSLIB.Service({
-                ros: connection,     // same connection as the topic
-                name: `/${vehicle}/CPFStop`,
-                serviceType: 'cpf_control/StartStop'
-              });
-
-              stopService.callService(new ROSLIB.ServiceRequest(), () => {
-                console.log(`CPF stopped for ${vehicle}`);
-              });
-            });
-
             executionProgressTopic.unsubscribe();
           }
         });
@@ -608,6 +597,85 @@
           document.getElementById("executionProgress").style.width = "0%";
         }
       }, 500);
+    }
+
+    function startCPFForSelectedVehicles() {
+      const selectedVehicles = getSelectedVehicles();
+      if (!selectedVehicles || selectedVehicles.length === 0) {
+        console.warn("No vehicles selected");
+        return;
+      }
+
+      let startedCount = 0;
+      const totalToStart = selectedVehicles.length * rosConnections.length;
+
+      rosConnections.forEach(ros => {
+        selectedVehicles.forEach(vehicle => {
+
+          const startService = new ROSLIB.Service({
+            ros: ros,
+            name: `/${vehicle}/CPFStart`,
+            serviceType: 'cpf_control/StartStop'
+          });
+
+          startService.callService(
+            new ROSLIB.ServiceRequest(),
+            () => {
+              console.log(`CPF started for ${vehicle} on ${ros.url}`);
+
+              startedCount++;
+
+              // Optional: detect when all are started
+              if (startedCount === totalToStart) {
+                console.log("All selected vehicles started CPF");
+              }
+            },
+            (error) => {
+              console.error(`Failed to start CPF for ${vehicle} on ${ros.url}`, error);
+            }
+          );
+
+        });
+      });
+    }
+
+    function stopCPFForSelectedVehicles() {
+      const selectedVehicles = getSelectedVehicles();
+      if (!selectedVehicles || selectedVehicles.length === 0) {
+        console.warn("No vehicles selected");
+        return;
+      }
+
+      let stoppedCount = 0;
+      const totalToStop = selectedVehicles.length * rosConnections.length;
+
+      rosConnections.forEach(ros => {
+        selectedVehicles.forEach(vehicle => {
+
+          const stopService = new ROSLIB.Service({
+            ros: ros,
+            name: `/${vehicle}/CPFStop`,
+            serviceType: 'cpf_control/StartStop'
+          });
+
+          stopService.callService(
+            new ROSLIB.ServiceRequest(),
+            () => {
+              console.log(`CPF stopped for ${vehicle} on ${ros.url}`);
+
+              stoppedCount++;
+
+              if (stoppedCount === totalToStop) {
+                console.log("All selected vehicles stopped CPF");
+              }
+            },
+            (error) => {
+              console.error(`Failed to stop CPF for ${vehicle} on ${ros.url}`, error);
+            }
+          );
+
+        });
+      });
     }
 
     function refreshVehicleList() {
@@ -1023,7 +1091,7 @@
         vehicle_name: vehicleName, // or dynamically choose
         E: vehicles[vehicleName].E,       // Easting
         N: vehicles[vehicleName].N,       // Northing
-        theta: vehicles[vehicleName].theta,   // heading in radians
+        theta: vehicles[vehicleName].yaw + Math.PI / 2,   // heading in radians
         v: vehicles[vehicleName].v     // desired velocity
       });
       sampleStatesService.callService(request, function (result) {
@@ -1083,7 +1151,7 @@
         // Fallback: draw plain circle if image not loaded yet
         ctx.beginPath();
         ctx.arc(0, 0, pixelRadius, 0, 2 * Math.PI);
-        ctx.fillStyle = color;
+        ctx.fillStyle = "yellow";
         ctx.fill();
       }
 

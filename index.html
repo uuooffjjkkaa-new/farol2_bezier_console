@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Motion Planning Console</title>
+  <script src="https://cdn.jsdelivr.net/npm/roslib/build/roslib.min.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <div id="log"></div>
+  <div style="display:flex; align-items:flex-start;">
+    <canvas id="map" width="894" height="624" style="border:1px solid black;"></canvas>
+
+    <div style="margin-left:15px; width:800px; font-family:sans-serif;">
+      <div style="display:flex; margin-bottom:1px;">
+        <button class="tabBtn activeTab" data-tab="missionTab">Mission Control</button>
+        <button class="tabBtn" data-tab="planningTab">Planning Setup</button>
+      </div>
+
+      <div id="missionTab" class="tabContent activeContent">
+        <div style="display:flex; gap:40px; align-items:flex-start; margin-left: 30px;">
+          <div style="flex:1;">
+            <h4>Goal</h4>
+            <div class="inputRow">
+              <label>Heading [º]:</label>
+              <input id="goal_theta" type="number" class="big" step="5" value="0" style="margin-left: 16px;">
+            </div>
+            <div class="inputRow">
+              <label>Surge [m/s]:</label>
+              <input id="goal_v" type="number" class="big" step="0.01" value="0.01" style="margin-left: 14px;">
+            </div>
+            <button type="button" data-action="applyGoal">Apply Goal Parameters</button>
+
+            <h4>Obstacle</h4>
+            <div class="inputRow">
+              <div class="inputPair">
+                <label>Radius [m]:</label>
+                <input type="number" class="big" id="obstacleRadius" value="2" min="0.1" step="0.1">
+              </div>
+              <div class="inputPair">
+                <button class="smallBtn" type="button" data-action="addObstacle">Add</button>
+                <button class="smallBtn" type="button" data-action="removeObstacle">Remove</button>
+              </div>
+            </div>
+            <button type="button" data-action="sendObstacles">Send obstacle to node</button>
+
+            <h4>Active Vehicles</h4>
+            <div id="vehicleList" class="inputRow" style="margin-bottom: 8px;"></div>
+
+            <h4>----------------------------------</h4>
+            <div class="control-panel">
+              <div class="control-box">
+                <h5>Trajectories</h5>
+                <div class="button-row">
+                  <button class="run-btn" type="button" data-action="addTrajectories">Display</button>
+                  <button class="cancel-btn" type="button" data-action="removeTrajectories">Remove</button>
+                </div>
+              </div>
+              <div class="control-box">
+                <h5>Optimization</h5>
+                <div class="button-row">
+                  <button class="run-btn" type="button" data-action="runOptimization">Run</button>
+                  <button class="cancel-btn" type="button" data-action="cancelOptimization">Cancel</button>
+                </div>
+              </div>
+              <div class="control-box">
+                <h5>CPF</h5>
+                <div class="button-row">
+                  <button class="start-btn" type="button" data-action="startCPF">Start</button>
+                  <button class="stop-btn" type="button" data-action="stopCPF">Stop</button>
+                </div>
+              </div>
+              <div class="control-box">
+                <h5>PF</h5>
+                <div class="button-row">
+                  <button class="start-btn" type="button" data-action="startPF">Start</button>
+                  <button class="stop-btn" type="button" data-action="stopPF">Stop</button>
+                </div>
+              </div>
+              <div class="control-box">
+                <h5>Mission</h5>
+                <button class="deploy-btn" type="button" data-action="deployMission">Deploy</button>
+              </div>
+            </div>
+          </div>
+
+          <div style="flex:1; max-width:200px; margin-right: 30px;">
+            <h4>Mission Stages</h4>
+            <div id="stageDiagram" style="display:flex; flex-direction:column; gap:12px;">
+              <div class="stage" id="stagePlanning">Planning<br>node active</div>
+              <div class="stage" id="stageObstacle">Obstacles<br>Updated</div>
+              <div class="stage" id="stageOptimization">Optimization</div>
+              <div class="stage" id="stageExecuting">
+                Executing
+                <div id="executionProgressContainer" style="margin-top:4px; background:#ddd; width:100%; height:8px; border-radius:4px;">
+                  <div id="executionProgress" style="width:0%; height:100%; background:#2196F3; border-radius:4px;"></div>
+                </div>
+              </div>
+            </div>
+            <h4 style="margin-top:20px;">Node Log</h4>
+            <div id="nodeLogContainer">
+              <div id="nodeLog"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="planningTab" class="tabContent">
+        <div style="display:flex; gap:40px; align-items:flex-start; margin-left: 30px;">
+          <div style="flex:1;">
+            <h4>Bounds</h4>
+            <h5>Surge [m/s]</h5>
+            <div class="inputRow"><label>min: </label> <input id="vel_min" type="number" class="big" step="0.001" value="0.001" style="margin-left: 14px;"></div>
+            <div class="inputRow"><label>max: </label> <input id="vel_max" type="number" class="big" step="0.001" value="0.3" style="margin-left: 10px;"></div>
+            <h5>Linear acceleration [m/s^2]</h5>
+            <div class="inputRow"><label>min:</label> <input id="acc_min" type="number" class="big" step="0.01" value="-0.03" style="margin-left: 14px;"></div>
+            <div class="inputRow"><label>max:</label> <input id="acc_max" type="number" class="big" step="0.01" value="0.03" style="margin-left: 10px;"></div>
+            <h5>Yaw-rate [rad/s]</h5>
+            <div class="inputRow"><label>min:</label> <input id="ang_vel_min" type="number" class="big" step="0.01" value="-0.15" style="margin-left: 14px;"></div>
+            <div class="inputRow"><label>max:</label> <input id="ang_vel_max" type="number" class="big" step="0.01" value="0.15" style="margin-left: 10px;"></div>
+            <h5>Angular acceleration[rad/s^2]</h5>
+            <div class="inputRow"><label>min:</label> <input id="ang_acc_min" type="number" class="big" step="0.001" value="-0.005" style="margin-left: 14px;"></div>
+            <div class="inputRow"><label>max:</label> <input id="ang_acc_max" type="number" class="big" step="0.001" value="0.005" style="margin-left: 10px;"></div>
+            <h5>Obstacle distance [m]</h5>
+            <div class="inputRow"><label>min:</label> <input id="obs_min" type="number" class="big" step="0.1" value="2.0" style="margin-left: 14px;"></div>
+            <div class="inputRow"><label>max:</label> <input id="obs_max" type="number" class="big" step="0.1" value="10000.0" style="margin-left: 10px;"></div>
+            <h5> Vehicle radius [m]</h5>
+            <input id="radius" type="number" class="big" step="0.1" value="1.5">
+          </div>
+
+          <div style="flex:1;">
+            <h4 style="margin-bottom: 4px;">Cost Function Gains</h4>
+            <div class="inputRow"><label>Time:</label> <input id="alpha" type="number" class="small" step="0.1" value="1.0" style="margin-left: 55px;"></div>
+            <div class="inputRow"><label>Energy:</label> <input id="beta" type="number" class="small" step="0.1" value="1.0" style="margin-left: 40px;"></div>
+            <div class="inputRow"><label>End points:</label> <input id="gamma" type="number" class="small" step="0.1" value="1.0" style="margin-left: 10px;"></div>
+            <h4>Bezier Parameters</h4>
+            <h5>
+              Bezier degree:
+              <input type="number" class="small" id="bezierDegree" value="9" min="1">
+              &nbsp;&nbsp;&nbsp;&nbsp;
+              Guess degree:
+              <input type="number" class="small" id="guessDegree" value="7" min="1">
+            </h5>
+            <h5>Split:</h5>
+            <div id="nSplitInputs">
+              <input type="number" class="small" value="1">
+              <input type="number" class="small" value="1">
+              <input type="number" class="small" value="1">
+            </div>
+            <h5>Active constraints</h5>
+            <label style="font-size: 12px;"><input type="checkbox" id="c0" checked> Velocity</label>
+            <label style="font-size: 12px;"><input type="checkbox" id="c1"> Acceleration</label>
+            <label style="font-size: 12px;"><input type="checkbox" id="c2"> Angular velocity</label>
+            <label style="font-size: 12px;"><input type="checkbox" id="c3"> Angular acceleration</label>
+            <button type="button" data-action="loadPlannerConfig">Load From Solver</button>
+            <button type="button" data-action="applyChanges">Apply Changes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+
+</html>

@@ -91,37 +91,68 @@ h4.separator {
   margin: 12px 0;
 }
 
-/* Tab buttons 
-.tabBtn {
-  flex: 1;
-  padding: 8px;
-  cursor: pointer;
-  border: none;
-  background: #eee;
-  font-weight: bold;
-  transition: background 0.2s;
+.cpf-buttons {
+  display: flex;
+  gap: 10px;
 }
 
-.tabBtn:hover {
-  background: #ddd;
+.start-btn {
+  background-color: #4CAF50;
 }
 
-.activeTab {
-  background: white;
-  border-bottom: 2px solid black;
+.stop-btn {
+  background-color: #f44336;
 }
 
-.tabContent {
-  padding-top: 5px;
-  display: none;
-  opacity: 0;
-  transition: opacity 0.3s ease-in-out;
+.control-box {
+  border: 1px solid #000000;
+  border-radius: 10px;
+  padding: 10px;
+  margin: 10px 0;
+  background-color: #f9f9f9;
 }
 
-.tabContent.activeContent {
-  display: block;
-  opacity: 1;
-}*/
+.control-box h4 {
+  margin: 0 0 8px 0;
+  font-family: sans-serif;
+}
+
+/* Optional button colors */
+.run-btn {
+  background-color: #4CAF50;
+}
+
+.cancel-btn {
+  background-color: #f44336;
+}
+
+/* Panel layout */
+.control-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 15px;
+  margin-top: 10px;
+}
+
+/* Button row */
+.button-row {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* Button colors */
+.run-btn, .start-btn {
+  background-color: #4CAF50;
+}
+
+.cancel-btn, .stop-btn {
+  background-color: #f44336;
+}
+
+.deploy-btn {
+  background-color: #2196F3;
+}
 
 /* Tab buttons (independent of regular buttons) */
 .tabBtn {

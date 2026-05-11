@@ -59,13 +59,48 @@
 
             <h4>----------------------------------</h4>
 
-            <div><button type="button" onclick="runOptimization()">Run Optimization</button></div>
-            <div><button type="button" onclick="cancelOptimization()">Cancel Optimization</button></div>
-            <div><button type="button" onclick="startCPFForSelectedVehicles()">Start CPF</button></div>
-            <div><button type="button" onclick="stopCPFForSelectedVehicles()">Stop CPF</button></div>
-            <div><button type="button" onclick="deployMissionWithProgress()">Deploy Mission</button></div>
+            <div class="control-panel">
+              <div class="control-box">
+                <h5>Trejectories</h5>
+                <div class="button-row">
+                  <button class="run-btn" onclick="addTrajectoriesForSelectedVehicles()">Display</button>
+                  <button class="cancel-btn" onclick="removeTrajectoriesForSelectedVehicles()">Remove</button>
+                </div>
+              </div>
+
+              <div class="control-box">
+                <h5>Optimization</h5>
+                <div class="button-row">
+                  <button class="run-btn" onclick="runOptimization()">Run</button>
+                  <button class="cancel-btn" onclick="cancelOptimization()">Cancel</button>
+                </div>
+              </div>
+
+              <div class="control-box">
+                <h5>CPF</h5>
+                <div class="button-row">
+                  <button class="start-btn" onclick="startCPFForSelectedVehicles()">Start</button>
+                  <button class="stop-btn" onclick="stopCPFForSelectedVehicles()">Stop</button>
+                </div>
+              </div>
+
+              <div class="control-box">
+                <h5>PF</h5>
+                <div class="button-row">
+                  <button class="start-btn" onclick="startPFForSelectedVehicles()">Start</button>
+                  <button class="stop-btn" onclick="stopPFForSelectedVehicles()">Stop</button>
+                </div>
+              </div>
+
+              <div class="control-box">
+                <h5>Mission</h5>
+                <button class="deploy-btn" onclick="deployMissionWithProgress()">Deploy</button>
+              </div>
+
+            </div>
           </div>
 
+          <!-- RIGHT SIDE: MISSION STAGES & LOG  -->
           <div style="flex:1; max-height:10px; max-width:200px; margin-right: 30px;">
             <h4>Mission Stages</h4>
             <div id="stageDiagram" style="display:flex; flex-direction:column; gap:12px;">
@@ -205,7 +240,7 @@
     rosRemote.on('error', (error) => { console.error("Remote ROS error:", error); });
 
     // Keep track of the previous vehicle list
-    const rosRemote2 = new ROSLIB.Ros({ url: 'ws://myellow:10111' });
+    const rosRemote2 = new ROSLIB.Ros({ url: 'ws://192.168.1.33:9090' });
 
     rosRemote2.on('connection', () => {
       document.getElementById('log').innerHTML += '<p>Connected to remote ROS at 10.16.145.13</p>';
@@ -282,6 +317,7 @@
     const executionSamples = {
       // vehicleId: [{ E, N, t }]
     };
+    const visibleTrajectories = new Set();
     const missionTopics = {};
     const missionTopics_addons = {};
     const missionStrings = {};
@@ -353,9 +389,9 @@
       name: "/motion_planning_cpp/cancel_optimization",
       serviceType: "std_srvs/Trigger"
     });
-    const sampleStatesService = new ROSLIB.Service({
+    const setStatesService = new ROSLIB.Service({
       ros: rosLocal,
-      name: "/motion_planning_cpp/sample_states",
+      name: "/motion_planning_cpp/set_states",
       serviceType: "motion_planning_cpp/SetState"
     });
     const setObstaclesService = new ROSLIB.Service({
@@ -372,7 +408,7 @@
       const cx = event.clientX - rect.left;
       const cy = event.clientY - rect.top;
 
-      const { E, N } = canvasToWorld_new(cx, cy);
+      const { E, N } = canvasToWorld(cx, cy);
 
       const clickedVehicle = findVehicleAt(E, N);
 
@@ -383,7 +419,7 @@
         selectedObstacle = null;
         console.log(`Vehicle ${clickedVehicle} selected!`);
 
-        // --- CALL SAMPLE STATES SERVICE ---
+        // --- CALL SET STATES SERVICE ---
         sendStateToVehicle(selectedVehicle);
         
         
@@ -478,206 +514,6 @@
       addLog(message.data);
     });
 
-
-    function startCPFForVehicle(vehicle, callback) {
-      const startService = new ROSLIB.Service({
-        ros: rosLocal,
-        name: `/${vehicle}/CPFStart`,
-        serviceType: 'cpf_control/StartStop'
-      });
-
-      startService.callService(new ROSLIB.ServiceRequest(), (result) => {
-        console.log(`CPF started for ${vehicle}`, result);
-        if (callback) callback();
-      });
-    }
-
-    function stopCPFForVehicle(vehicle, callback) {
-      const stopService = new ROSLIB.Service({
-        ros: rosLocal,
-        name: `/${vehicle}/CPFStop`,
-        serviceType: 'cpf_control/StartStop'
-      });
-
-      stopService.callService(new ROSLIB.ServiceRequest(), (result) => {
-        console.log(`CPF stopped for ${vehicle}`, result);
-        if (callback) callback();
-      });
-    }
-
-    function deployMissionWithProgress() {
-      const selectedVehicles = getSelectedVehicles(); // Vehicles checked in the UI
-      if (!selectedVehicles || selectedVehicles.length === 0) return;
-                                 isExecutingMission = true;
-
-      // Reset execution samples for selected vehicles
-      for (const vehicleId of selectedVehicles) {
-        executionSamples[vehicleId] = [];
-      }
-
-      let startedCount = 0;
-
-      rosConnections.forEach(ros => {
-        selectedVehicles.forEach(vehicle => {
-          
-          // Once all vehicles are started, deploy missions
-          subscribeExecutionProgress(selectedVehicles);
-
-          // Publish missions directly from stored mission strings
-          selectedVehicles.forEach(name => {
-            if (missionTopics_addons[ros.url][name] && missionStrings[name]) {
-
-              // ---- LOG mission topic and string before publishing ----
-              console.log(`About to publish mission for ${name}:`);
-              console.log(`ROS connection URL: ${ros.url}`);
-              console.log(`Mission topic object:`, missionTopics_addons[ros.url][name]);
-              console.log(`Mission string content:`, missionStrings[name]);
-
-              const msg = new ROSLIB.Message({
-                data: missionStrings[name]
-              });
-              missionTopics_addons[ros.url][name].publish(msg);
-
-              console.log(`Mission published for ${name} on ROS ${ros.url}`);
-            } else {
-              console.warn(`No mission available for ${name} or mission topic not initialized`);
-            }
-          });
-
-          setStage("stageExecuting", "running");
-        
-        });
-      });
-    }
-
-    function subscribeExecutionProgress(activeVehicles) {
-      if (!activeVehicles || activeVehicles.length === 0) return;
-
-      const firstVehicle = activeVehicles[0];
-      const topicName = `/${firstVehicle}/Gamma`;
-      
-      let lastExecutionHeartbeat = Date.now();
-
-      // Loop over all ROS connections
-      rosConnections.forEach(connection => {
-        const executionProgressTopic = new ROSLIB.Topic({
-          ros: connection,           // use this single connection
-          name: topicName,
-          messageType: 'std_msgs/Float64'
-        });
-
-        executionProgressTopic.subscribe(msg => {
-          lastExecutionHeartbeat = Date.now();
-
-          const progress = Math.min(Math.max(msg.data, 0), 1);
-
-          // Update progress bar
-          const progressEl = document.getElementById("executionProgress");
-          progressEl.style.width = `${progress * 100}%`;
-
-          // Running
-          if (progress > 0 && progress < 1) {
-            setStage("stageExecuting", "running");
-          }
-
-          // ✅ COMPLETED
-          else if (progress >= 1) {
-            setStage("stageExecuting", "completed");
-            isExecutingMission = false;
-
-            executionProgressTopic.unsubscribe();
-          }
-        });
-      });
-
-      // Auto-reset if no updates in 2 sec
-      setInterval(() => {
-        if (Date.now() - lastExecutionHeartbeat > 2000) {
-          resetStage("stageExecuting");
-          document.getElementById("executionProgress").style.width = "0%";
-        }
-      }, 500);
-    }
-
-    function startCPFForSelectedVehicles() {
-      const selectedVehicles = getSelectedVehicles();
-      if (!selectedVehicles || selectedVehicles.length === 0) {
-        console.warn("No vehicles selected");
-        return;
-      }
-
-      let startedCount = 0;
-      const totalToStart = selectedVehicles.length * rosConnections.length;
-
-      rosConnections.forEach(ros => {
-        selectedVehicles.forEach(vehicle => {
-
-          const startService = new ROSLIB.Service({
-            ros: ros,
-            name: `/${vehicle}/CPFStart`,
-            serviceType: 'cpf_control/StartStop'
-          });
-
-          startService.callService(
-            new ROSLIB.ServiceRequest(),
-            () => {
-              console.log(`CPF started for ${vehicle} on ${ros.url}`);
-
-              startedCount++;
-
-              // Optional: detect when all are started
-              if (startedCount === totalToStart) {
-                console.log("All selected vehicles started CPF");
-              }
-            },
-            (error) => {
-              console.error(`Failed to start CPF for ${vehicle} on ${ros.url}`, error);
-            }
-          );
-
-        });
-      });
-    }
-
-    function stopCPFForSelectedVehicles() {
-      const selectedVehicles = getSelectedVehicles();
-      if (!selectedVehicles || selectedVehicles.length === 0) {
-        console.warn("No vehicles selected");
-        return;
-      }
-
-      let stoppedCount = 0;
-      const totalToStop = selectedVehicles.length * rosConnections.length;
-
-      rosConnections.forEach(ros => {
-        selectedVehicles.forEach(vehicle => {
-
-          const stopService = new ROSLIB.Service({
-            ros: ros,
-            name: `/${vehicle}/CPFStop`,
-            serviceType: 'cpf_control/StartStop'
-          });
-
-          stopService.callService(
-            new ROSLIB.ServiceRequest(),
-            () => {
-              console.log(`CPF stopped for ${vehicle} on ${ros.url}`);
-
-              stoppedCount++;
-
-              if (stoppedCount === totalToStop) {
-                console.log("All selected vehicles stopped CPF");
-              }
-            },
-            (error) => {
-              console.error(`Failed to stop CPF for ${vehicle} on ${ros.url}`, error);
-            }
-          );
-
-        });
-      });
-    }
-
     function refreshVehicleList() {
       rosConnections.forEach(ros => {
         ros.getTopicsAndRawTypes((result) => {
@@ -766,6 +602,7 @@
                     E: p.pose.position.y,
                     N: p.pose.position.x
                   }));
+                  visibleTrajectories.add(name); // auto show new ones
                   setStage("stageOptimization", "completed");
                   drawAllObjects();
                 });
@@ -811,46 +648,9 @@
         });
     }
 
-    function updateVehicleCheckboxList() {
-      const container = document.getElementById("vehicleList");
-      container.innerHTML = "";
-
-      vehicleNames.forEach(name => {
-        const div = document.createElement("div");
-        div.style.display = "flex";
-        div.style.alignItems = "center";
-        div.style.marginRight = "12px";
-
-        const label = document.createElement("label");
-        label.style.marginRight = "6px";
-        label.textContent = name;
-
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.id = `chk_${name}`;
-
-        // ✅ Preserve previous selection
-        checkbox.checked = selectedVehiclesSet.has(name);
-
-        // ✅ Update selection when user clicks
-        checkbox.addEventListener("change", () => {
-          if (checkbox.checked) {
-            selectedVehiclesSet.add(name);
-          } else {
-            selectedVehiclesSet.delete(name);
-          }
-          console.log("Selected:", Array.from(selectedVehiclesSet));
-        });
-
-        div.appendChild(label);
-        div.appendChild(checkbox);
-        container.appendChild(div);
-      });
-    }
-
-    function getSelectedVehicles() {
-      return Array.from(selectedVehiclesSet);
-    }
+    //#############################################################################//
+    //######              DRAWING STUFF ON THE WEB FUNCTIONS                #######//
+    //#############################################################################//
 
     function drawBackground() {
       if (!backgroundLoaded) return;
@@ -899,36 +699,6 @@
       ctx.restore();
     }
 
-    function drawAllObjects_old() {
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      drawBackground();
-
-      for (const name in goals) {
-        const g = goals[name];
-        const v = vehicles[name];
-        if (!v) continue;
-        drawGoal(g.E, g.N, g.theta ?? 0, v.color, v.id);
-      }
-
-      for (const name in plannedTrajectories) {
-        const v = vehicles[name];
-        if (!v) continue;
-        drawTrajectory(plannedTrajectories[name], v.color);
-      }
-
-      for (const id of obstacleIds) {
-        const obs = obstacles[id];
-        drawObstacle(obs.E, obs.N, obs.radius, obs.color, id, id === selectedObstacle);
-      }
-
-      for (const name in vehicles) {
-        const v = vehicles[name];
-        drawVehicle(v.E, v.N, v.yaw, v.color, v.id, name === selectedVehicle);
-      }
-    }
-
     function drawAllObjects() {
       ctx.setTransform(1, 0, 0, 1, 0, 0); // reset transform
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -947,6 +717,9 @@
       }
 
       for (const name in plannedTrajectories) {
+        // only draw if explicitly enabled
+        if (!visibleTrajectories.has(name)) continue;
+
         const v = vehicles[name];
         if (!v) continue;
         drawTrajectory(plannedTrajectories[name], v.color);
@@ -1006,121 +779,6 @@
     function vehicleNumber(name) {
       const match = name.match(/\d+$/);
       return match ? match[0] : "";
-    }
-
-    function canvasToWorld_new(cx, cy) {
-      // undo pan
-      const x1 = (cx - offsetX) / scaleFactor;
-      const y1 = (cy - offsetY) / scaleFactor;
-
-      // undo original centering + scaling
-      const E = (x1 - canvas.width / 2) / scale + centerEasting;
-      const N = centerNorthing - (y1 - canvas.height / 2) / scale;
-
-      return { E, N };
-    }
-
-    function worldToCanvas_new(E, N) {
-      // original mapping
-      const x0 = (E - centerEasting) * scale + canvas.width / 2;
-      const y0 = canvas.height / 2 - (N - centerNorthing) * scale;
-
-      // zoom + pan
-      const cx = x0 * scaleFactor + offsetX;
-      const cy = y0 * scaleFactor + offsetY;
-
-      return { cx, cy };
-    }
-
-    function canvasToWorld(cx, cy) {
-      const E = (cx - canvas.width / 2) / scale + centerEasting;
-      const N = centerNorthing - (cy - canvas.height / 2) / scale;
-      return { E, N };
-    }
-
-    function worldToCanvas(E, N) {
-      const cx = (E - centerEasting) * scale + canvas.width / 2;
-      const cy = canvas.height / 2 - (N - centerNorthing) * scale;
-      return { cx, cy };
-    }
-
-    function findVehicleAt(E, N, toleranceMeters = 5) {
-      for (const name in vehicles) {
-        const v = vehicles[name];
-        const dx = v.E - E;
-        const dy = v.N - N;
-        if (Math.sqrt(dx * dx + dy * dy) < toleranceMeters / scaleFactor) {
-          return name;
-        }
-      }
-      return null;
-    }
-
-    function sendGoalToVehicle(vehicleName, E, N) {
-
-      let theta = 0.0;
-      let v = 0.01;
-
-      // If UI-defined parameters exist, use them
-      if (goalParams[vehicleName]) {
-        theta = goalParams[vehicleName].theta ?? theta;
-        v = goalParams[vehicleName].v ?? v;
-      }
-      // 4. Send service request
-      const request = new ROSLIB.ServiceRequest({
-        vehicle_name: vehicleName, // or dynamically choose
-        E: E,       // Easting
-        N: N,       // Northing
-        theta: theta * Math.PI / 180,   // heading in radians
-        v: v     // desired velocity
-      });
-
-      setGoalService.callService(request, function (result) {
-        if (result.success) {
-          console.log("Goal set successfully:", result.message);
-        } else {
-          console.warn("Failed to set goal:", result.message);
-        }
-      });
-    }
-
-    function sendStateToVehicle(vehicleName) {
-
-      // 4. Send service request
-      const request = new ROSLIB.ServiceRequest({
-        vehicle_name: vehicleName, // or dynamically choose
-        E: vehicles[vehicleName].E,       // Easting
-        N: vehicles[vehicleName].N,       // Northing
-        theta: vehicles[vehicleName].yaw + Math.PI / 2,   // heading in radians
-        v: vehicles[vehicleName].v     // desired velocity
-      });
-      sampleStatesService.callService(request, function (result) {
-        if (result.success) {
-          console.log("State set successfully:", result.message);
-        } else {
-          console.warn("Failed to set state:", result.message);
-        }
-      });
-    }
-
-    function applyGoalParams() {
-      if (!selectedVehicle) {
-        alert("No vehicle selected");
-        return;
-      }
-
-      const theta = parseFloat(document.getElementById("goal_theta").value);
-      const v = parseFloat(document.getElementById("goal_v").value);
-
-      goalParams[selectedVehicle] = {
-        theta: isNaN(theta) ? 0.0 : theta,
-        v: isNaN(v) ? 0.01 : v
-      };
-
-      console.log(
-        `Goal params set for ${selectedVehicle}:`,
-        goalParams[selectedVehicle]
-      );
     }
 
     function vehicleColor(name) {
@@ -1211,6 +869,102 @@
       ctx.stroke();
     }
 
+
+    //#############################################################################//
+    //######                 WEB INTERACTION RELATED STUFF                  #######//
+    //#############################################################################//
+
+    function updateVehicleCheckboxList() {
+      const container = document.getElementById("vehicleList");
+      container.innerHTML = "";
+
+      vehicleNames.forEach(name => {
+        const div = document.createElement("div");
+        div.style.display = "flex";
+        div.style.alignItems = "center";
+        div.style.marginRight = "12px";
+
+        const label = document.createElement("label");
+        label.style.marginRight = "6px";
+        label.textContent = name;
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.id = `chk_${name}`;
+
+        // ✅ Preserve previous selection
+        checkbox.checked = selectedVehiclesSet.has(name);
+
+        // ✅ Update selection when user clicks
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked) {
+            selectedVehiclesSet.add(name);
+          } else {
+            selectedVehiclesSet.delete(name);
+          }
+          console.log("Selected:", Array.from(selectedVehiclesSet));
+        });
+
+        div.appendChild(label);
+        div.appendChild(checkbox);
+        container.appendChild(div);
+      });
+    }
+
+    function getSelectedVehicles() {
+      return Array.from(selectedVehiclesSet);
+    }
+
+    function canvasToWorld(cx, cy) {
+      // undo pan
+      const x1 = (cx - offsetX) / scaleFactor;
+      const y1 = (cy - offsetY) / scaleFactor;
+
+      // undo original centering + scaling
+      const E = (x1 - canvas.width / 2) / scale + centerEasting;
+      const N = centerNorthing - (y1 - canvas.height / 2) / scale;
+
+      return { E, N };
+    }
+
+    function worldToCanvas(E, N) {
+      const cx = (E - centerEasting) * scale + canvas.width / 2;
+      const cy = canvas.height / 2 - (N - centerNorthing) * scale;
+      return { cx, cy };
+    }
+
+    function findVehicleAt(E, N, toleranceMeters = 5) {
+      for (const name in vehicles) {
+        const v = vehicles[name];
+        const dx = v.E - E;
+        const dy = v.N - N;
+        if (Math.sqrt(dx * dx + dy * dy) < toleranceMeters / scaleFactor) {
+          return name;
+        }
+      }
+      return null;
+    }
+
+    function applyGoalParams() {
+      if (!selectedVehicle) {
+        alert("No vehicle selected");
+        return;
+      }
+
+      const theta = parseFloat(document.getElementById("goal_theta").value);
+      const v = parseFloat(document.getElementById("goal_v").value);
+
+      goalParams[selectedVehicle] = {
+        theta: isNaN(theta) ? 0.0 : theta,
+        v: isNaN(v) ? 0.01 : v
+      };
+
+      console.log(
+        `Goal params set for ${selectedVehicle}:`,
+        goalParams[selectedVehicle]
+      );
+    }
+
     function addObstacleAtCenter() {
       const radius = parseFloat(document.getElementById("obstacleRadius").value);
 
@@ -1272,37 +1026,435 @@
       drawAllObjects();
     }
 
-    function applyBezierParams() {
-      const degree = parseInt(document.getElementById("bezierDegree").value);
-      const guess_degree = parseInt(document.getElementById("guessDegree").value);
+    function addTrajectoriesForSelectedVehicles() {
+      const selectedVehicles = getSelectedVehicles();
+      if (!selectedVehicles?.length) return;
 
-      const nSplitInputs = document
-        .getElementById("nSplitInputs")
-        .querySelectorAll("input");
+      for (const v of selectedVehicles) {
+        visibleTrajectories.add(v);
+        console.log("Added trajectory:", v);
+      }
 
-      const nSplit = Array.from(nSplitInputs).map(i => parseInt(i.value));
+      drawAllObjects();
+    }
 
-      const constr_flags = [
-        document.getElementById("c0").checked,
-        document.getElementById("c1").checked,
-        document.getElementById("c2").checked,
-        document.getElementById("c3").checked
-      ];
+    function removeTrajectoriesForSelectedVehicles() {
+      const selectedVehicles = getSelectedVehicles();
+      if (!selectedVehicles?.length) return;
 
-      const request = new ROSLIB.ServiceRequest({
-        bezier_degree: degree,
-        guess_degree: guess_degree,
-        nSplit: nSplit,
-        constr_flags: constr_flags,
-        number_sample_Pts: 200
-      });
+      for (const v of selectedVehicles) {
+        visibleTrajectories.delete(v);
+        console.log("Removed trajectory:", v);
+      }
 
-      setParamsService.callService(request, (result) => {
-        console.log("SetBezierParams:", result);
-        alert(result.message);
+      drawAllObjects();
+    }
+
+    function addLog(message) {
+      const log = document.getElementById("nodeLog");
+
+      const entry = document.createElement("div");
+      entry.className = "log-entry";
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+
+      log.appendChild(entry);
+
+      // Auto-scroll to bottom
+      log.parentElement.scrollTop = log.parentElement.scrollHeight;
+    }
+
+    function openTab(tabId, event) {
+      const contents = document.getElementsByClassName("tabContent");
+      const buttons = document.getElementsByClassName("tabBtn");
+
+      // Hide all tabs
+      for (let i = 0; i < contents.length; i++) {
+        contents[i].classList.remove("activeContent");
+      }
+
+      // Remove active class from all buttons
+      for (let i = 0; i < buttons.length; i++) {
+        buttons[i].classList.remove("activeTab");
+      }
+
+      // Show selected tab
+      document.getElementById(tabId).classList.add("activeContent");
+
+      // Mark the clicked button as active
+      event.currentTarget.classList.add("activeTab");
+    }
+
+    function resetStage(stageId) {
+      setStage(stageId, "pending");
+    }
+
+    function setStage(stageId, state) {
+      const stage = document.getElementById(stageId);
+      if (!stage) return;
+
+      // Remove previous state
+      stage.classList.remove("completed", "running");
+
+      // Apply new state
+      if (state === "completed") {
+        stage.classList.add("completed");
+      }
+      else if (state === "running") {
+        stage.classList.add("running");
+      }
+    }
+
+    function saveMapState() {
+      localStorage.setItem("mp_obstacles", JSON.stringify(obstacles));
+      localStorage.setItem("mp_goals", JSON.stringify(goals));
+    }
+
+    function loadMapState() {
+
+      const savedObstacles = localStorage.getItem("mp_obstacles");
+      const savedGoals = localStorage.getItem("mp_goals");
+
+      if (savedObstacles) {
+        Object.assign(obstacles, JSON.parse(savedObstacles));
+      }
+
+      if (savedGoals) {
+        Object.assign(goals, JSON.parse(savedGoals));
+      }
+
+      drawAllObjects();
+    }
+
+    //#############################################################################//
+    //######               PLANNING RELATED STUFF & SERVICES                #######//
+    //#############################################################################//
+    
+    function deployMissionWithProgress() {
+      const selectedVehicles = getSelectedVehicles(); // Vehicles checked in the UI
+      if (!selectedVehicles || selectedVehicles.length === 0) return;
+                                 isExecutingMission = true;
+
+      // Reset execution samples for selected vehicles
+      for (const vehicleId of selectedVehicles) {
+        executionSamples[vehicleId] = [];
+      }
+
+      let startedCount = 0;
+
+      rosConnections.forEach(ros => {
+        selectedVehicles.forEach(vehicle => {
+          
+          // Once all vehicles are started, deploy missions
+          subscribeExecutionProgress(selectedVehicles);
+
+          // Publish missions directly from stored mission strings
+          selectedVehicles.forEach(name => {
+            if (missionTopics_addons[ros.url][name] && missionStrings[name]) {
+
+              // ---- LOG mission topic and string before publishing ----
+              console.log(`About to publish mission for ${name}:`);
+              console.log(`ROS connection URL: ${ros.url}`);
+              console.log(`Mission topic object:`, missionTopics_addons[ros.url][name]);
+              console.log(`Mission string content:`, missionStrings[name]);
+
+              const msg = new ROSLIB.Message({
+                data: missionStrings[name]
+              });
+              missionTopics_addons[ros.url][name].publish(msg);
+
+              console.log(`Mission published for ${name} on ROS ${ros.url}`);
+            } else {
+              console.warn(`No mission available for ${name} or mission topic not initialized`);
+            }
+          });
+
+          setStage("stageExecuting", "running");
+        
+        });
       });
     }
 
+    function subscribeExecutionProgress(activeVehicles) {
+      if (!activeVehicles || activeVehicles.length === 0) return;
+
+      const firstVehicle = activeVehicles[0];
+      const topicName = `/${firstVehicle}/Gamma`;
+      const statusTopicName = `/${firstVehicle}/Flag`; // ✅ NEW: status topic
+      
+      let lastExecutionHeartbeat = Date.now();
+
+      // Loop over all ROS connections
+      rosConnections.forEach(connection => {
+        const executionProgressTopic = new ROSLIB.Topic({
+          ros: connection,           // use this single connection
+          name: topicName,
+          messageType: 'std_msgs/Float64'
+        });
+
+        executionProgressTopic.subscribe(msg => {
+          lastExecutionHeartbeat = Date.now();
+
+          const progress = Math.min(Math.max(msg.data, 0), 1);
+
+          // Update progress bar
+          const progressEl = document.getElementById("executionProgress");
+          progressEl.style.width = `${progress * 100}%`;
+
+          // Running
+          if (progress > 0 && progress < 1) {
+            setStage("stageExecuting", "running");
+          }
+
+          // ✅ COMPLETED
+          else if (progress >= 1) {
+            setStage("stageExecuting", "completed");
+            isExecutingMission = false;
+
+            executionProgressTopic.unsubscribe();
+          }
+        });
+        // ---- ✅ NEW: Status topic ----
+        const statusTopic = new ROSLIB.Topic({
+          ros: connection,
+          name: statusTopicName,
+          messageType: 'std_msgs/Int32'
+        });
+
+        statusTopic.subscribe(msg => {
+          const currentStatus = msg.data;
+
+          // Detect transition to 4
+          if (previousStatus !== 0 && currentStatus === 0) {
+            console.log("Mission completed via status topic");
+
+            setStage("stageExecuting", "completed");
+            isExecutingMission = false;
+
+            // Optional: cleanup
+            executionProgressTopic.unsubscribe();
+            statusTopic.unsubscribe();
+          }
+
+          previousStatus = currentStatus;
+        });
+      });
+
+      
+
+      // Auto-reset if no updates in 2 sec
+      setInterval(() => {
+        if (Date.now() - lastExecutionHeartbeat > 2000) {
+          resetStage("stageExecuting");
+          document.getElementById("executionProgress").style.width = "0%";
+        }
+      }, 500);
+    }
+
+    function startCPFForSelectedVehicles() {
+      const selectedVehicles = getSelectedVehicles();
+      if (!selectedVehicles || selectedVehicles.length === 0) {
+        console.warn("No vehicles selected");
+        return;
+      }
+
+      let startedCount = 0;
+      const totalToStart = selectedVehicles.length * rosConnections.length;
+
+      rosConnections.forEach(ros => {
+        selectedVehicles.forEach(vehicle => {
+
+          const startService = new ROSLIB.Service({
+            ros: ros,
+            name: `/${vehicle}/CPFStart`,
+            serviceType: 'cpf_control/StartStop'
+          });
+
+          startService.callService(
+            new ROSLIB.ServiceRequest(),
+            () => {
+              console.log(`CPF started for ${vehicle} on ${ros.url}`);
+
+              startedCount++;
+
+              // Optional: detect when all are started
+              if (startedCount === totalToStart) {
+                console.log("All selected vehicles started CPF");
+              }
+            },
+            (error) => {
+              console.error(`Failed to start CPF for ${vehicle} on ${ros.url}`, error);
+            }
+          );
+
+        });
+      });
+    }
+
+    function stopCPFForSelectedVehicles() {
+      const selectedVehicles = getSelectedVehicles();
+      if (!selectedVehicles || selectedVehicles.length === 0) {
+        console.warn("No vehicles selected");
+        return;
+      }
+
+      let stoppedCount = 0;
+      const totalToStop = selectedVehicles.length * rosConnections.length;
+
+      rosConnections.forEach(ros => {
+        selectedVehicles.forEach(vehicle => {
+
+          const stopService = new ROSLIB.Service({
+            ros: ros,
+            name: `/${vehicle}/CPFStop`,
+            serviceType: 'cpf_control/StartStop'
+          });
+
+          stopService.callService(
+            new ROSLIB.ServiceRequest(),
+            () => {
+              console.log(`CPF stopped for ${vehicle} on ${ros.url}`);
+
+              stoppedCount++;
+
+              if (stoppedCount === totalToStop) {
+                console.log("All selected vehicles stopped CPF");
+              }
+            },
+            (error) => {
+              console.error(`Failed to stop CPF for ${vehicle} on ${ros.url}`, error);
+            }
+          );
+
+        });
+      });
+    }
+    
+    function startPFForSelectedVehicles() {
+      const selectedVehicles = getSelectedVehicles();
+      if (!selectedVehicles || selectedVehicles.length === 0) {
+        console.warn("No vehicles selected");
+        return;
+      }
+
+      let startedCount = 0;
+      const totalToStart = selectedVehicles.length * rosConnections.length;
+
+      rosConnections.forEach(ros => {
+        selectedVehicles.forEach(vehicle => {
+
+          const startService = new ROSLIB.Service({
+            ros: ros,
+            name: `/${vehicle}/PFStart`,
+            serviceType: 'path_following/StartPF'
+          });
+
+          startService.callService(
+            new ROSLIB.ServiceRequest(),
+            () => {
+              console.log(`PF started for ${vehicle} on ${ros.url}`);
+
+              startedCount++;
+
+              // Optional: detect when all are started
+              if (startedCount === totalToStart) {
+                console.log("All selected vehicles started PF");
+              }
+            },
+            (error) => {
+              console.error(`Failed to start PF for ${vehicle} on ${ros.url}`, error);
+            }
+          );
+
+        });
+      });
+    }
+
+    function stopPFForSelectedVehicles() {
+      const selectedVehicles = getSelectedVehicles();
+      if (!selectedVehicles || selectedVehicles.length === 0) {
+        console.warn("No vehicles selected");
+        return;
+      }
+
+      let stoppedCount = 0;
+      const totalToStop = selectedVehicles.length * rosConnections.length;
+
+      rosConnections.forEach(ros => {
+        selectedVehicles.forEach(vehicle => {
+
+          const stopService = new ROSLIB.Service({
+            ros: ros,
+            name: `/${vehicle}/PFStop`,
+            serviceType: 'path_following/StopPF'
+          });
+
+          stopService.callService(
+            new ROSLIB.ServiceRequest(),
+            () => {
+              console.log(`PF stopped for ${vehicle} on ${ros.url}`);
+
+              stoppedCount++;
+
+              if (stoppedCount === totalToStop) {
+                console.log("All selected vehicles stopped PF");
+              }
+            },
+            (error) => {
+              console.error(`Failed to stop PF for ${vehicle} on ${ros.url}`, error);
+            }
+          );
+
+        });
+      });
+    }
+
+    function sendGoalToVehicle(vehicleName, E, N) {
+
+      let theta = 0.0;
+      let v = 0.01;
+
+      // If UI-defined parameters exist, use them
+      if (goalParams[vehicleName]) {
+        theta = goalParams[vehicleName].theta ?? theta;
+        v = goalParams[vehicleName].v ?? v;
+      }
+      // 4. Send service request
+      const request = new ROSLIB.ServiceRequest({
+        vehicle_name: vehicleName, // or dynamically choose
+        E: E,       // Easting
+        N: N,       // Northing
+        theta: theta * Math.PI / 180,   // heading in radians
+        v: v     // desired velocity
+      });
+
+      setGoalService.callService(request, function (result) {
+        if (result.success) {
+          console.log("Goal set successfully:", result.message);
+        } else {
+          console.warn("Failed to set goal:", result.message);
+        }
+      });
+    }
+
+    function sendStateToVehicle(vehicleName) {
+
+      // 4. Send service request
+      const request = new ROSLIB.ServiceRequest({
+        vehicle_name: vehicleName, // or dynamically choose
+        E: vehicles[vehicleName].E,       // Easting
+        N: vehicles[vehicleName].N,       // Northing
+        theta: vehicles[vehicleName].yaw + Math.PI / 2,   // heading in radians
+        v: vehicles[vehicleName].v     // desired velocity
+      });
+      setStatesService.callService(request, function (result) {
+        if (result.success) {
+          console.log("State set successfully:", result.message);
+        } else {
+          console.warn("Failed to set state:", result.message);
+        }
+      });
+    }
+    
     function sendObstacles() {
       // Flatten circular obstacles: x, y, radius
       const circ_obs = obstacleIds.map(id => {
@@ -1372,23 +1524,49 @@
       // Stop execution sampling if active
       isExecutingMission = false;
 
-
-
       // Clear execution samples
       for (const key in executionSamples) {
         executionSamples[key] = [];
       }
+
       const request = new ROSLIB.ServiceRequest();
 
-      startService.callService(new ROSLIB.ServiceRequest(), () => {
+      cancelOptimizationService.callService(request, (res) => {
+        console.log(res.message);
+        alert(res.message);
 
-        cancelOptimizationService.callService(request, (res) => {
-          console.log(res.message);
-          alert(res.message);
+        setStage("stageOptimization", "idle");
+      });
+    }
 
-          setStage("stageOptimization", "idle");
-        });
+    function applyBezierParams() {
+      const degree = parseInt(document.getElementById("bezierDegree").value);
+      const guess_degree = parseInt(document.getElementById("guessDegree").value);
 
+      const nSplitInputs = document
+        .getElementById("nSplitInputs")
+        .querySelectorAll("input");
+
+      const nSplit = Array.from(nSplitInputs).map(i => parseInt(i.value));
+
+      const constr_flags = [
+        document.getElementById("c0").checked,
+        document.getElementById("c1").checked,
+        document.getElementById("c2").checked,
+        document.getElementById("c3").checked
+      ];
+
+      const request = new ROSLIB.ServiceRequest({
+        bezier_degree: degree,
+        guess_degree: guess_degree,
+        nSplit: nSplit,
+        constr_flags: constr_flags,
+        number_sample_Pts: 200
+      });
+
+      setParamsService.callService(request, (result) => {
+        console.log("SetBezierParams:", result);
+        alert(result.message);
       });
     }
 
@@ -1419,88 +1597,6 @@
     function applyChanges() {
       applyBezierParams();
       applyBounds();
-    }
-
-    function openTab(tabId, event) {
-      const contents = document.getElementsByClassName("tabContent");
-      const buttons = document.getElementsByClassName("tabBtn");
-
-      // Hide all tabs
-      for (let i = 0; i < contents.length; i++) {
-        contents[i].classList.remove("activeContent");
-      }
-
-      // Remove active class from all buttons
-      for (let i = 0; i < buttons.length; i++) {
-        buttons[i].classList.remove("activeTab");
-      }
-
-      // Show selected tab
-      document.getElementById(tabId).classList.add("activeContent");
-
-      // Mark the clicked button as active
-      event.currentTarget.classList.add("activeTab");
-    }
-
-    function resetStages() {
-      const stages = document.querySelectorAll(".stage");
-      stages.forEach(stage => {
-        stage.classList.remove("completed", "running");
-      });
-    }
-
-    function resetStage(stageId) {
-      setStage(stageId, "pending");
-    }
-
-    function setStage(stageId, state) {
-      const stage = document.getElementById(stageId);
-      if (!stage) return;
-
-      // Remove previous state
-      stage.classList.remove("completed", "running");
-
-      // Apply new state
-      if (state === "completed") {
-        stage.classList.add("completed");
-      }
-      else if (state === "running") {
-        stage.classList.add("running");
-      }
-    }
-
-    function saveMapState() {
-      localStorage.setItem("mp_obstacles", JSON.stringify(obstacles));
-      localStorage.setItem("mp_goals", JSON.stringify(goals));
-    }
-
-    function loadMapState() {
-
-      const savedObstacles = localStorage.getItem("mp_obstacles");
-      const savedGoals = localStorage.getItem("mp_goals");
-
-      if (savedObstacles) {
-        Object.assign(obstacles, JSON.parse(savedObstacles));
-      }
-
-      if (savedGoals) {
-        Object.assign(goals, JSON.parse(savedGoals));
-      }
-
-      drawAllObjects();
-    }
-
-    function addLog(message) {
-      const log = document.getElementById("nodeLog");
-
-      const entry = document.createElement("div");
-      entry.className = "log-entry";
-      entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-
-      log.appendChild(entry);
-
-      // Auto-scroll to bottom
-      log.parentElement.scrollTop = log.parentElement.scrollHeight;
     }
 
     function loadPlannerConfig() {

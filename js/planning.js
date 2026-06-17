@@ -191,7 +191,7 @@ function sendGoalToVehicle(vehicleName, E, N, goalParams = { theta: 0, v: 0.01 }
   const request = {
     vehicle_name: vehicleName,
     e: E,
-    N: N,
+    n: N,
     theta: (goalParams.theta ?? 0) * Math.PI / 180,
     v: goalParams.v ?? 0.01
   };

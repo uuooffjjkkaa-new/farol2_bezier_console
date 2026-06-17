@@ -162,9 +162,9 @@ function refreshVehicleList() {
           });
 
           subscribeVehicleState(ros, name, (msg) => {
-            vehicles[name].E = msg.X;
-            vehicles[name].N = msg.Y;
-            vehicles[name].yaw = (msg.Yaw * Math.PI / 180) - Math.PI / 2;
+            vehicles[name].E = msg.x;
+            vehicles[name].N = msg.y;
+            vehicles[name].yaw = (msg.yaw * Math.PI / 180) - Math.PI / 2;
             vehicles[name].v = msg.u;
             drawScene();
           });

@@ -8,8 +8,8 @@
 const canvas = document.getElementById('map');
 const ctx = canvas.getContext('2d');
 
-const centerEasting = 298/2; //491899;
-const centerNorthing = 208/2; //4290842;
+const centerEasting = 481685; //491899;
+const centerNorthing = 4282433; //4290842;
 const scale = 3;
 const ESizeMeters = 298;
 const NSizeMeters = 208;

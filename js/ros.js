@@ -12,8 +12,8 @@
 
 const DEFAULT_ROS_URLS = [
   'ws://localhost:9090',
-  'ws://192.168.1.32:9090',
-  'ws://192.168.1.33:9090'
+  // 'ws://192.168.1.32:9090',
+  // 'ws://192.168.1.33:9090'
 ];
 
 const rosConnections = [];
@@ -25,14 +25,14 @@ const missionStrings = {};
 const serviceClients = {};
 
 const serviceConfigs = {
-  setGoal: { name: '/motion_planning_cpp/set_goal', serviceType: 'motion_planning_cpp/SetState' },
-  setBezierParams: { name: '/motion_planning_cpp/set_bezier_params', serviceType: 'motion_planning_cpp/SetBezierParams' },
-  setBounds: { name: '/motion_planning_cpp/set_bounds', serviceType: 'motion_planning_cpp/SetBoundsandGains' },
-  runOptimization: { name: '/motion_planning_cpp/run_optimization', serviceType: 'motion_planning_cpp/RunOptimization' },
-  cancelOptimization: { name: '/motion_planning_cpp/cancel_optimization', serviceType: 'std_srvs/Trigger' },
-  setStates: { name: '/motion_planning_cpp/set_states', serviceType: 'motion_planning_cpp/SetState' },
-  setObstacles: { name: '/motion_planning_cpp/set_obstacles', serviceType: 'motion_planning_cpp/SetObstacles' },
-  getPlannerConfig: { name: '/motion_planning_cpp/get_planner_config', serviceType: 'motion_planning_cpp/GetPlannerConfig' }
+  setGoal: { name: '/farol2_motion_planning/set_goal', serviceType: 'farol2_motion_planning/srv/SetState' },
+  setBezierParams: { name: '/farol2_motion_planning/set_bezier_params', serviceType: 'farol2_motion_planning/srv/SetBezierParams' },
+  setBounds: { name: '/farol2_motion_planning/set_bounds', serviceType: 'farol2_motion_planning/srv/SetBoundsAndGains' },  // Changed from SetBoundsandGains
+  runOptimization: { name: '/farol2_motion_planning/run_optimization', serviceType: 'farol2_motion_planning/srv/RunOptimization' },
+  cancelOptimization: { name: '/farol2_motion_planning/cancel_optimization', serviceType: 'std_srvs/srv/Trigger' },
+  setStates: { name: '/farol2_motion_planning/set_states', serviceType: 'farol2_motion_planning/srv/SetState' },
+  setObstacles: { name: '/farol2_motion_planning/set_obstacles', serviceType: 'farol2_motion_planning/srv/SetObstacles' },
+  getPlannerConfig: { name: '/farol2_motion_planning/get_planner_config', serviceType: 'farol2_motion_planning/srv/GetPlannerConfig' }
 };
 
 function createRosInstance(url) {
@@ -118,9 +118,10 @@ function buildVehicleListFromTopics(ros) {
   return new Promise((resolve, reject) => {
     ros.getTopics((result) => {
       const topics = result.topics || [];
+      // Updated pattern for ROS2 vehicles (e.g., /mred0/State, /mblack1/State)
       const vehicleList = topics
         .map((topicName) => {
-          const match = topicName.match(/^\/(m(red|black|yellow|vector)[0-9]+)\/State$/);
+          const match = topicName.match(/^\/(m(red|black|yellow|vector|agicelectric)\d+)\/State$/);
           return match ? match[1] : null;
         })
         .filter(Boolean);
@@ -134,7 +135,7 @@ function buildVehicleListFromTopics(ros) {
 function buildVehicleNamesFromRawTopics(topics) {
   return topics
     .map((topicName) => {
-      const match = topicName.match(/^\/(m(red|black|yellow|vector)[0-9]+)\/State$/);
+      const match = topicName.match(/^\/(m(red|black|yellow|vector|agicelectric)\d+)\/State$/);
       return match ? match[1] : null;
     })
     .filter(Boolean);
@@ -172,7 +173,7 @@ function subscribeToMissionLog(callback) {
   const ros = getRosConnection(DEFAULT_ROS_URLS[0]) || rosConnections[0];
   if (!ros) return null;
 
-  const logTopic = createTopic({ ros, name: '/mission_log', messageType: 'std_msgs/String' });
+  const logTopic = createTopic({ ros, name: '/farol2_motion_planning/mission_log', messageType: 'std_msgs/msg/String' });
   logTopic.subscribe((message) => {
     if (typeof callback === 'function') callback(message.data);
   });
@@ -183,7 +184,7 @@ function subscribeToMissionLog(callback) {
 function subscribePlanningAlive(callback, ros = getRosConnection(DEFAULT_ROS_URLS[0]) || rosConnections[0]) {
   if (!ros) return null;
 
-  const aliveTopic = createTopic({ ros, name: '/motion_planning_cpp/node_alive', messageType: 'std_msgs/Bool' });
+  const aliveTopic = createTopic({ ros, name: '/farol2_motion_planning/node_alive', messageType: 'std_msgs/msg/Bool' });
   aliveTopic.subscribe((message) => {
     if (typeof callback === 'function') callback(message.data);
   });
@@ -193,7 +194,7 @@ function subscribePlanningAlive(callback, ros = getRosConnection(DEFAULT_ROS_URL
 
 function subscribeVehicleState(ros, vehicleName, onMessage) {
   if (!ros || !vehicleName) return null;
-  const topic = createTopic({ ros, name: `/${vehicleName}/State`, messageType: 'farol_msgs/mState' });
+  const topic = createTopic({ ros, name: `/${vehicleName}/State`, messageType: 'farol2_interfaces/msg/StateConsole' });
   topic.subscribe(onMessage);
   return topic;
 }
@@ -208,7 +209,7 @@ function subscribePlannedTrajectory(onTrajectory) {
       trajectoryTopics[vehicleName] = createTopic({
         ros: localRos,
         name: `/${vehicleName}/planned_path`,
-        messageType: 'nav_msgs/Path'
+        messageType: 'nav_msgs/msg/Path'
       });
       trajectoryTopics[vehicleName].subscribe(onTrajectory);
     }
@@ -222,7 +223,7 @@ function subscribePlannerMissionOutput(vehicleName, callback, ros = getRosConnec
   const topic = createTopic({
     ros,
     name: `/${vehicleName}/planning_console/Mission_String`,
-    messageType: 'std_msgs/String'
+    messageType: 'std_msgs/msg/String'
   });
 
   topic.subscribe((msg) => {

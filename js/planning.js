@@ -145,7 +145,7 @@ function subscribeExecutionProgress(activeVehicles, { onProgress, onCompleted, o
   executionSubscribers.set(activeVehicles.join(','), unsubscribe);
   return unsubscribe;
 }
-
+// TODO: Correct the cpf according to the new implementation
 function startCPFForSelectedVehicles(selectedVehicles, { onStarted, onError } = {}) {
   return callStartStopService(selectedVehicles, 'CPFStart', 'cpf_control/StartStop', onStarted, onError);
 }
@@ -155,11 +155,11 @@ function stopCPFForSelectedVehicles(selectedVehicles, { onStopped, onError } = {
 }
 
 function startPFForSelectedVehicles(selectedVehicles, { onStarted, onError } = {}) {
-  return callStartStopService(selectedVehicles, 'PFStart', 'path_following/StartPF', onStarted, onError);
+  return callStartStopService(selectedVehicles, 'control/path_following/Start', 'farol2_path_following/srv/StartPF', onStarted, onError);
 }
 
 function stopPFForSelectedVehicles(selectedVehicles, { onStopped, onError } = {}) {
-  return callStartStopService(selectedVehicles, 'PFStop', 'path_following/StopPF', onStopped, onError);
+  return callStartStopService(selectedVehicles, 'control/path_following/Stop', 'farol2_path_following/srv/StopPF', onStopped, onError);
 }
 
 function callStartStopService(selectedVehicles, serviceName, serviceType, onSuccess, onError) {
@@ -190,8 +190,8 @@ function callStartStopService(selectedVehicles, serviceName, serviceType, onSucc
 function sendGoalToVehicle(vehicleName, E, N, goalParams = { theta: 0, v: 0.01 }) {
   const request = {
     vehicle_name: vehicleName,
-    E,
-    N,
+    e: E,
+    N: N,
     theta: (goalParams.theta ?? 0) * Math.PI / 180,
     v: goalParams.v ?? 0.01
   };
@@ -202,8 +202,8 @@ function sendGoalToVehicle(vehicleName, E, N, goalParams = { theta: 0, v: 0.01 }
 function sendStateToVehicle(vehicleName, vehicleState) {
   const request = {
     vehicle_name: vehicleName,
-    E: vehicleState.E,
-    N: vehicleState.N,
+    e: vehicleState.E,
+    n: vehicleState.N,
     theta: vehicleState.yaw + Math.PI / 2,
     v: vehicleState.v
   };
@@ -269,7 +269,7 @@ function applyBezierParams(params, { onSuccess, onError } = {}) {
   const request = {
     bezier_degree: params.bezierDegree,
     guess_degree: params.guessDegree,
-    nSplit: params.nSplit,
+    n_split: params.nSplit,
     constr_flags: params.constrFlags,
     number_sample_Pts: params.numberSamplePts ?? 200
   };
@@ -338,3 +338,69 @@ export {
   applyChanges,
   loadPlannerConfig
 };
+
+// export async function setGoal(vehicleName, north, east, theta, velocity) {
+//   const request = {
+//     vehicle_name: vehicleName,
+//     n: north,        // Changed from 'north' to 'n'
+//     e: east,         // Changed from 'east' to 'e'
+//     theta: theta,
+//     v: velocity
+//   };
+  
+//   return rosModule.callServiceAsync('setGoal', request);
+// }
+
+// export async function setBezierParams(degree, guessDeree, nSplit, constrFlags, numSamplePoints) {
+//   const request = {
+//     bezier_degree: degree,
+//     guess_degree: guessDeree,
+//     n_split: nSplit,           // Changed from 'nSplit'
+//     constr_flags: constrFlags, // Changed from 'constraintFlags'
+//     number_sample_pts: numSamplePoints
+//   };
+  
+//   return rosModule.callServiceAsync('setBezierParams', request);
+// }
+
+// export async function setBounds(bounds) {
+//   const request = {
+//     vel_min: bounds.vel_min,
+//     vel_max: bounds.vel_max,
+//     acc_min: bounds.acc_min,
+//     acc_max: bounds.acc_max,
+//     ang_vel_min: bounds.ang_vel_min,
+//     ang_vel_max: bounds.ang_vel_max,
+//     ang_acc_min: bounds.ang_acc_min,
+//     ang_acc_max: bounds.ang_acc_max,
+//     obs_min: bounds.obs_min,
+//     obs_max: bounds.obs_max,
+//     radius: bounds.radius,
+//     alpha: bounds.alpha,
+//     beta: bounds.beta,
+//     gamma: bounds.gamma
+//   };
+  
+//   return rosModule.callServiceAsync('setBounds', request);
+// }
+
+// export async function runOptimization(vehicleNames) {
+//   const request = {
+//     vehicle_names: vehicleNames || []
+//   };
+  
+//   return rosModule.callServiceAsync('runOptimization', request);
+// }
+
+// export async function setObstacles(circularObstacles, lineObstacles) {
+//   const request = {
+//     circ_obs: circularObstacles || [],
+//     line_obs: lineObstacles || []
+//   };
+  
+//   return rosModule.callServiceAsync('setObstacles', request);
+// }
+
+// export async function getPlannerConfig() {
+//   return rosModule.callServiceAsync('getPlannerConfig', {});
+// }

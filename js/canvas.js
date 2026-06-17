@@ -8,8 +8,8 @@
 const canvas = document.getElementById('map');
 const ctx = canvas.getContext('2d');
 
-const centerEasting = 491899;
-const centerNorthing = 4290842;
+const centerEasting = 298/2; //491899;
+const centerNorthing = 208/2; //4290842;
 const scale = 3;
 const ESizeMeters = 298;
 const NSizeMeters = 208;
@@ -27,11 +27,11 @@ let selectedVehicle = null;
 let selectedObstacle = null;
 
 const background = new Image();
-background.src = 'map_expo_color.png';
+background.src = 'assets/map_expo_color.png';
 let backgroundLoaded = false;
 
 const obstacleImg = new Image();
-obstacleImg.src = 'island_circ.png';
+obstacleImg.src = 'assets/island_circ.png';
 
 background.onload = () => {
   backgroundLoaded = true;
@@ -249,7 +249,7 @@ function findObstacleAt(E, N, obstacles, obstacleIds) {
   return null;
 }
 
-function drawAllObjects({ goals, vehicles, plannedTrajectories, executionSamples, obstacleIds, obstacles, visibleTrajectories }) {
+function drawAllObjects({ goals = {}, vehicles = {}, plannedTrajectories = {}, executionSamples = {}, obstacleIds = [], obstacles = {}, visibleTrajectories = {}} = {}) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.translate(offsetX, offsetY);

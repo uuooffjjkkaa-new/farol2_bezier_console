@@ -137,17 +137,13 @@ function getObstacleRadius() {
 }
 
 function getBezierParamsFromUI() {
-  const degree = parseNumber(document.getElementById('bezierDegree')?.value, 9);
-  const guessDegree = parseNumber(document.getElementById('guessDegree')?.value, 7);
-  const splitInputs = document.querySelectorAll('#nSplitInputs input');
-  const nSplit = Array.from(splitInputs).map((input) => parseNumber(input.value, 1));
-  const constrFlags = [
-    !!document.getElementById('c0')?.checked,
-    !!document.getElementById('c1')?.checked,
-    !!document.getElementById('c2')?.checked,
-    !!document.getElementById('c3')?.checked
-  ];
-  return { degree, guessDegree, nSplit, constrFlags };
+  return {
+    bezier_degree: parseInt(document.getElementById('bezierDegree').value),
+    guess_degree: parseInt(document.getElementById('guessDegree').value),
+    n_split: JSON.parse(document.getElementById('nSplit').value),
+    constr_flags: JSON.parse(document.getElementById('constrFlags').value),
+    number_sample_pts: parseInt(document.getElementById('numSamplePoints').value)
+  };
 }
 
 function getBoundsAndGainsFromUI() {

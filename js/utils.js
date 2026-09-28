@@ -20,7 +20,7 @@ function vehicleColor(name) {
   if (name.startsWith('mred')) return 'red';
   if (name.startsWith('mblack')) return 'black';
   if (name.startsWith('myellow')) return 'yellow';
-  if (name.startsWith('mvector')) return 'green';
+  if (name.startsWith('magicelectric')) return 'green';
   return 'blue';
 }
 

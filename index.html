@@ -23,33 +23,48 @@
       <div id="missionTab" class="tabContent activeContent">
         <div style="display:flex; gap:40px; align-items:flex-start; margin-left: 30px;">
           <div style="flex:1;">
-            <h4>Goal</h4>
-            <div class="inputRow">
-              <label>Heading [º]:</label>
-              <input id="goal_theta" type="number" class="big" step="5" value="0" style="margin-left: 16px;">
-            </div>
-            <div class="inputRow">
-              <label>Surge [m/s]:</label>
-              <input id="goal_v" type="number" class="big" step="0.01" value="0.01" style="margin-left: 14px;">
-            </div>
-            <button type="button" data-action="applyGoal">Apply Goal Parameters</button>
-
-            <h4>Obstacle</h4>
-            <div class="inputRow">
-              <div class="inputPair">
-                <label>Radius [m]:</label>
-                <input type="number" class="big" id="obstacleRadius" value="2" min="0.1" step="0.1">
+            <div class="control-panel">
+              <!-- <div class="control-box">
+                <h5>Goal</h5>
+                <div class="inputRow">
+                  <label>Heading [º]:</label>
+                  <input id="goal_theta" type="number" class="small" step="5" value="0" style="margin-left: 16px;">
+                </div>
+                <div class="inputRow">
+                  <label>Surge [m/s]:</label>
+                  <input id="goal_v" type="number" class="small" step="0.01" value="0.01" style="margin-left: 14px;">
+                </div>
+                <button type="button" data-action="applyGoal">Apply Goal Parameters</button>
+              </div> -->
+              <div class="control-box">
+                <h5>Obstacle</h5>
+                <div class="button-row">
+                  <button class="run-btn" type="button" data-action="addObstacle">Add</button>
+                  <div class="inputPair">
+                    <button class="cancel-btn" type="button" data-action="removeObstacle">Remove</button>
+                    <button class="cancel-btn" type="button" data-action="removeAllObstacles">Remove All</button>
+                  </div>
+                </div>
               </div>
-              <div class="inputPair">
-                <button class="smallBtn" type="button" data-action="addObstacle">Add</button>
-                <button class="smallBtn" type="button" data-action="removeObstacle">Remove</button>
+              <div class="control-box">
+                <h5>Vehicle</h5>
+                <div class="button-row">
+                  <button class="run-btn" type="button" data-action="addVehicle">Add</button>
+                  <div class="inputPair">
+                    <button class="cancel-btn" type="button" data-action="removeVehicle">Remove</button>
+                    <button class="cancel-btn" type="button" data-action="removeAllVehicles">Remove All</button>
+                  </div>
+                </div>
+              </div>
+              <div class="control-box">
+                <h5>Active Vehicles</h5>
+                <div id="vehicleList" class="inputRow" style="margin-bottom: 8px;"></div>
+              </div>
+
+              <div id="useSimulState" class="inputRow" style="margin-bottom: 8px;">
+                <label style="font-size: 16px;"><input type="checkbox" id="useSimState"> Use sim state</label>
               </div>
             </div>
-            <button type="button" data-action="sendObstacles">Send obstacle to node</button>
-
-            <h4>Active Vehicles</h4>
-            <div id="vehicleList" class="inputRow" style="margin-bottom: 8px;"></div>
-
             <h4>----------------------------------</h4>
             <div class="control-panel">
               <div class="control-box">

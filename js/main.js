@@ -18,12 +18,17 @@ import {
 import {
   initCanvas,
   drawAllObjects,
+  centerEasting,
+  centerNorthing,
+  handleDragOccurred,
+  setHandleDragOccurred,
   canvasToWorld,
   findVehicleAt,
   findObstacleAt,
   zoomCanvas,
   beginDrag,
   dragCanvas,
+  beginDragRightClick,
   endDrag,
   setSelectedVehicle,
   setSelectedObstacle
@@ -81,7 +86,9 @@ let knownVehicles = [];
 let rosConnections = [];
 let lastPlanningHeartbeat = Date.now();
 let nextObstacleId = 0;
+let nextVehicleId = 0;
 let isExecutingMission = false;
+let sim_active_flag = false;
 
 function drawScene() {
   drawAllObjects({
@@ -101,10 +108,34 @@ function updateVehicleCheckboxUI() {
   });
 }
 
+function isUsingSimState() {
+    return document.getElementById('useSimState').checked;
+}
+
+function addVehicleAtCenter() {
+    const id = `mred${nextVehicleId}`;
+    nextVehicleId += 1;
+    vehicles[id] = {
+        E: centerEasting,
+        N: centerNorthing,
+        yaw: 0.0,
+        v: 0.01,
+        color: vehicleColor(id),
+        id: nextVehicleId - 1
+    };
+    setSelectedVehicleInternal(id);
+    setSelectedObstacleInternal(null);
+    knownVehicles.push(id);
+    updateVehicleCheckboxUI();
+    setStage('stageOptimization', 'pending');
+    drawScene();
+}
+
 function syncLoadedMapState() {
   const saved = loadMapState();
   Object.assign(obstacles, saved.obstacles || {});
   Object.assign(goals, saved.goals || {});
+  Object.assign(vehicles, saved.vehicles || {});
 
   obstacleIds.length = 0;
   Object.keys(obstacles).forEach((id) => {
@@ -123,103 +154,185 @@ function setSelectedObstacleInternal(id) {
 }
 
 function refreshVehicleList() {
-  rosConnections.forEach((ros) => {
-    ros.getTopicsAndRawTypes((result) => {
-      const allTopics = result.topics || [];
-      const currentVehicles = buildVehicleNamesFromRawTopics(allTopics);
+  if (isUsingSimState()) {
+    if (!sim_active_flag) {
+      removeAllVehicles();
+      sim_active_flag = true;
+    }
 
-      const changed = currentVehicles.length !== knownVehicles.length ||
-        !currentVehicles.every((name) => knownVehicles.includes(name));
+    rosConnections.forEach((ros) => {
+      ros.getTopicsAndRawTypes((result) => {
+        const allTopics = result.topics || [];
+        const currentVehicles = buildVehicleNamesFromRawTopics(allTopics);
 
-      if (!changed) return;
+        const changed = currentVehicles.length !== knownVehicles.length ||
+          !currentVehicles.every((name) => knownVehicles.includes(name));
 
-      currentVehicles.forEach((name) => {
-        if (!knownVehicles.includes(name)) knownVehicles.push(name);
-        if (!vehicles[name]) {
-          vehicles[name] = {
-            E: 0,
-            N: 0,
-            yaw: 0,
-            v: 0,
-            color: vehicleColor(name),
-            id: vehicleNumber(name)
-          };
-        }
+        if (!changed) return;
 
-        if (!subscribedVehicles.has(name)) {
-          subscribePlannedTrajectory((msg) => {
-            plannedTrajectories[name] = msg.poses.map((pose) => ({
-              E: pose.pose.position.y,
-              N: pose.pose.position.x
-            }));
-            visibleTrajectories.add(name);
-            setStage('stageOptimization', 'completed');
-            drawScene();
-          })(name);
+        currentVehicles.forEach((name) => {
+          if (!knownVehicles.includes(name)) knownVehicles.push(name);
+          if (!vehicles[name]) {
+            vehicles[name] = {
+              E: 0,
+              N: 0,
+              yaw: 0,
+              v: 0,
+              color: vehicleColor(name),
+              id: vehicleNumber(name)
+            };
+          }
 
-          subscribePlannerMissionOutput(name, () => {
-            addLog(`Mission received for ${name}`);
-          });
+          if (!subscribedVehicles.has(name)) {
+            subscribePlannedTrajectory((msg) => {
+              plannedTrajectories[name] = msg.poses.map((pose) => ({
+                E: pose.pose.position.y,
+                N: pose.pose.position.x
+              }));
+              visibleTrajectories.add(name);
+              setStage('stageOptimization', 'completed');
+              drawScene();
+            })(name);
 
-          subscribeVehicleState(ros, name, (msg) => {
-            vehicles[name].E = msg.x;
-            vehicles[name].N = msg.y;
-            vehicles[name].yaw = (msg.yaw * Math.PI / 180) - Math.PI / 2;
-            vehicles[name].v = msg.u;
-            drawScene();
-          });
+            subscribePlannerMissionOutput(name, () => {
+              addLog(`Mission received for ${name}`);
+            });
 
-          subscribedVehicles.add(name);
-        }
+            subscribeVehicleState(ros, name, (msg) => {
+              vehicles[name].E = msg.x;
+              vehicles[name].N = msg.y;
+              vehicles[name].yaw = (msg.yaw * Math.PI / 180) - Math.PI / 2;
+              vehicles[name].v = msg.u;
+              drawScene();
+            });
+
+            subscribedVehicles.add(name);
+          }
+        });
+
+        updateVehicleCheckboxUI();
       });
-
-      updateVehicleCheckboxUI();
     });
-  });
+  }
+  else {
+    if (sim_active_flag) {
+      removeAllVehicles();
+      sim_active_flag = false;
+    }
+
+    Object.keys(vehicles).forEach((name) => {
+      if (!subscribedVehicles.has(name)) {
+        subscribePlannedTrajectory((msg) => {
+          plannedTrajectories[name] = msg.poses.map((pose) => ({
+            E: pose.pose.position.y,
+            N: pose.pose.position.x
+          }));
+          visibleTrajectories.add(name);
+          setStage('stageOptimization', 'completed');
+          drawScene();
+        })(name);
+        subscribePlannerMissionOutput(name, () => {
+          addLog(`Mission received for ${name}`);
+        });
+        subscribedVehicles.add(name);
+      }
+    });
+
+    updateVehicleCheckboxUI();
+  
+  }
 }
 
 function handleCanvasClick(event) {
-  if (event.altKey) return;
-  const rect = event.currentTarget.getBoundingClientRect();
-  const cx = event.clientX - rect.left;
-  const cy = event.clientY - rect.top;
-  const { E, N } = canvasToWorld(cx, cy);
-
-  const clickedVehicle = findVehicleAt(E, N, vehicles);
-  const clickedObstacle = findObstacleAt(E, N, obstacles, obstacleIds);
-
-  if (clickedVehicle) {
-    setSelectedVehicleInternal(clickedVehicle);
-    setSelectedObstacleInternal(null);
-    sendStateToVehicle(clickedVehicle, vehicles[clickedVehicle]);
-    return;
-  }
-
-  if (clickedObstacle) {
-    setSelectedObstacleInternal(clickedObstacle);
-    setSelectedVehicleInternal(null);
-    return;
-  }
-
-  if (selectedVehicle) {
-    const params = goalParams[selectedVehicle] || { theta: 0, v: 0.01 };
-    goals[selectedVehicle] = { E, N, theta: params.theta };
-    sendGoalToVehicle(selectedVehicle, E, N, params)
-      .then(() => addLog(`Goal sent to ${selectedVehicle}`))
-      .catch((err) => console.error('Goal send failed', err));
-    saveMapState({ obstacles, goals });
-  }
-
-  if (selectedObstacle) {
-    const obs = obstacles[selectedObstacle];
-    if (obs) {
-      obs.E = E;
-      obs.N = N;
-      setStage('stageObstacle', 'pending');
-      drawScene();
-      saveMapState({ obstacles, goals });
+    if (event.altKey) return;
+    if (handleDragOccurred) {
+        setHandleDragOccurred(false);
+        return;
     }
-  }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const cx = event.clientX - rect.left;
+    const cy = event.clientY - rect.top;
+    const { E, N } = canvasToWorld(cx, cy);
+
+    const clickedVehicle = findVehicleAt(E, N, vehicles);
+    const clickedObstacle = findObstacleAt(E, N, obstacles, obstacleIds);
+
+    if (clickedVehicle) {
+        setSelectedVehicleInternal(clickedVehicle);
+        setSelectedObstacleInternal(null);
+        if (isUsingSimState()) {
+            sendStateToVehicle(clickedVehicle, vehicles[clickedVehicle]);
+        }
+        return;
+    }
+
+    if (clickedObstacle) {
+        setSelectedObstacleInternal(clickedObstacle);
+        setSelectedVehicleInternal(null);
+        return;
+    }
+
+    if (selectedVehicle) {
+        const v = vehicles[selectedVehicle];
+        if (v) {
+            v.E = E;
+            v.N = N;
+            drawScene();
+            saveMapState({ vehicles, obstacles, goals });
+        }
+        sendStateToVehicle(selectedVehicle, v);
+        return;
+    }
+
+    if (selectedObstacle) {
+        const obs = obstacles[selectedObstacle];
+        if (obs) {
+            obs.E = E;
+            obs.N = N;
+            setStage('stageObstacle', 'pending');
+            drawScene();
+            saveMapState({ vehicles, obstacles, goals });
+        }
+        sendObstacleData();
+    }
+}
+
+function handleCanvasRightClick(event) {
+    event.preventDefault(); // stop the browser context menu
+
+    if (event.altKey) return;
+    if (selectedVehicle == null) return;
+
+    // First, see if we're starting a drag on an existing goal
+    beginDragRightClick(event, goals, selectedVehicle);
+
+    if (handleDragOccurred) {
+        // A drag has been initiated, don't place a new goal.
+        return;
+    }
+
+    // Otherwise perform the existing "place goal" action
+    const rect = event.currentTarget.getBoundingClientRect();
+    const cx = event.clientX - rect.left;
+    const cy = event.clientY - rect.top;
+    const { E, N } = canvasToWorld(cx, cy);
+
+    const previousGoal = goals[selectedVehicle];
+
+    goals[selectedVehicle] = {
+        E,
+        N,
+        yaw: previousGoal?.yaw ?? 0,
+        v: previousGoal?.v ?? 0.01
+    };
+
+    drawScene();
+    saveMapState({ vehicles, obstacles, goals });
+
+    sendGoalToVehicle(selectedVehicle, goals[selectedVehicle])
+        .then(() => addLog(`Goal sent to ${selectedVehicle}`))
+        .catch((err) => console.error('Goal send failed', err));
 }
 
 function handleCanvasWheel(event) {
@@ -228,16 +341,28 @@ function handleCanvasWheel(event) {
 }
 
 function handleCanvasMouseDown(event) {
-  beginDrag(event);
+  beginDrag(event, obstacles, selectedObstacle, vehicles, selectedVehicle);
  }
 
 function handleCanvasMouseMove(event) {
-  dragCanvas(event);
-  if (event.altKey) drawScene();
+  dragCanvas(event, obstacles, vehicles, goals);
+  if (event.altKey) {
+    drawScene();
+  } else if (handleDragOccurred){
+    drawScene();
+    setStage('stageObstacle', 'pending');
+  }
+
 }
 
 function handleCanvasMouseUp() {
-  endDrag();
+  endDrag(obstacles, vehicles);
+  sendObstacleData();
+  if (selectedVehicle) {
+    sendStateToVehicle(selectedVehicle, vehicles[selectedVehicle]);
+    sendGoalToVehicle(selectedVehicle, goals[selectedVehicle])
+  }
+  saveMapState({ vehicles, obstacles, goals });
 }
 
 function applyGoalParamsFromUI() {
@@ -250,19 +375,21 @@ function applyGoalParamsFromUI() {
 }
 
 function addObstacleAtCenter() {
-  const radius = getObstacleRadius();
-  const id = `obs${nextObstacleId}`;
-  nextObstacleId += 1;
-  obstacles[id] = {
-    E: 491899,
-    N: 4290842,
-    radius,
-    color: 'gray'
-  };
-  obstacleIds.push(id);
-  setSelectedObstacleInternal(id);
-  setStage('stageObstacle', 'pending');
-  drawScene();
+    const id = `obs${nextObstacleId}`;
+    nextObstacleId += 1;
+    obstacles[id] = {
+        E: centerEasting,
+        N: centerNorthing,
+        a: 4.0,
+        b: 4.0,
+        phi: 0,                       // radians
+        color: 'gray'
+    };
+    obstacleIds.push(id);
+    setSelectedObstacleInternal(id);
+    setSelectedVehicleInternal(null);
+    setStage('stageObstacle', 'pending');
+    drawScene();
 }
 
 function removeObstacle() {
@@ -276,6 +403,44 @@ function removeObstacle() {
   setSelectedObstacleInternal(null);
   setStage('stageObstacle', 'pending');
   drawScene();
+  sendObstacleData();
+}
+
+function removeAllObstacles() {
+    obstacleIds.forEach((id) => {
+        delete obstacles[id];
+    });
+    obstacleIds.length = 0;
+    nextObstacleId = 0;
+    setSelectedObstacleInternal(null);
+    setStage('stageObstacle', 'pending');
+    drawScene();
+    sendObstacleData();
+}
+
+function removeVehicle() {
+  if (!selectedVehicle) {
+    alert('No vehicle is currently selected.');
+    return;
+  }
+  delete vehicles[selectedVehicle];
+  delete goals[selectedVehicle];
+  delete plannedTrajectories[selectedVehicle];
+  visibleTrajectories.delete(selectedVehicle);
+  setSelectedVehicleInternal(null);
+  drawScene();
+}
+
+function removeAllVehicles() {
+    Object.keys(vehicles).forEach((id) => {
+        delete vehicles[id];
+        delete goals[id];
+        delete plannedTrajectories[id];
+        visibleTrajectories.delete(id);
+    });
+    knownVehicles.length = 0;
+    setSelectedVehicleInternal(null);
+    drawScene();
 }
 
 function sendObstacleData() {
@@ -374,14 +539,10 @@ function loadPlannerConfigHandler() {
 
 function applyChangesHandler() {
   const bezier = getBezierParamsFromUI();
+  console.log('constr_flags being sent:', JSON.stringify(bezier.constr_flags));
   const { bounds, gains } = getBoundsAndGainsFromUI();
   applyChanges({
-    bezierParams: {
-      bezierDegree: bezier.degree,
-      guessDegree: bezier.guessDegree,
-      nSplit: bezier.nSplit,
-      constrFlags: bezier.constrFlags
-    },
+    bezierParams: bezier,
     boundParams: bounds,
     gains
   }, {
@@ -402,6 +563,7 @@ function initApp() {
   rosConnections = initRosConnections();
   initCanvas({
     onClick: handleCanvasClick,
+    onRightClick: handleCanvasRightClick,
     onWheel: handleCanvasWheel,
     onMouseDown: handleCanvasMouseDown,
     onMouseMove: handleCanvasMouseMove,
@@ -412,6 +574,10 @@ function initApp() {
     onApplyGoal: applyGoalParamsFromUI,
     onAddObstacle: addObstacleAtCenter,
     onRemoveObstacle: removeObstacle,
+    onRemoveAllObstacles: removeAllObstacles,
+    onAddVehicle: addVehicleAtCenter,
+    onRemoveVehicle: removeVehicle,
+    onRemoveAllVehicles: removeAllVehicles,
     onSendObstacles: sendObstacleData,
     onAddTrajectories: addTrajectoriesForSelectedVehicles,
     onRemoveTrajectories: removeTrajectoriesForSelectedVehicles,

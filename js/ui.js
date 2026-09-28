@@ -13,6 +13,10 @@ function initUI({
   onApplyGoal,
   onAddObstacle,
   onRemoveObstacle,
+  onRemoveAllObstacles,
+  onAddVehicle,
+  onRemoveVehicle,
+  onRemoveAllVehicles,
   onSendObstacles,
   onAddTrajectories,
   onRemoveTrajectories,
@@ -38,6 +42,10 @@ function initUI({
     applyGoal: onApplyGoal,
     addObstacle: onAddObstacle,
     removeObstacle: onRemoveObstacle,
+    addVehicle: onAddVehicle,
+    removeVehicle: onRemoveVehicle,
+    removeAllObstacles: onRemoveAllObstacles,
+    removeAllVehicles: onRemoveAllVehicles,
     sendObstacles: onSendObstacles,
     addTrajectories: onAddTrajectories,
     removeTrajectories: onRemoveTrajectories,
@@ -140,9 +148,8 @@ function getBezierParamsFromUI() {
   return {
     bezier_degree: parseInt(document.getElementById('bezierDegree').value),
     guess_degree: parseInt(document.getElementById('guessDegree').value),
-    n_split: JSON.parse(document.getElementById('nSplit').value),
-    constr_flags: JSON.parse(document.getElementById('constrFlags').value),
-    number_sample_pts: parseInt(document.getElementById('numSamplePoints').value)
+    n_split: Array.from(document.querySelectorAll('#nSplitInputs input')).map(input => parseInt(input.value, 10)),
+    constr_flags: Array.from({length: 4}, (_, i) => document.getElementById(`c${i}`).checked)
   };
 }
 

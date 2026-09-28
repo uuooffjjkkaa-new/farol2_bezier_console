@@ -59,6 +59,9 @@ function deployMissionWithProgress(selectedVehicles, { onProgress, onStarted, on
         return;
       }
 
+      // Print mission string to browser console
+      console.log(`Mission for ${name}:`, missionString);
+
       const msg = new window.ROSLIB.Message({ data: missionString });
       missionTopic.publish(msg);
       onStarted?.(name, ros.url);
@@ -147,19 +150,19 @@ function subscribeExecutionProgress(activeVehicles, { onProgress, onCompleted, o
 }
 // TODO: Correct the cpf according to the new implementation
 function startCPFForSelectedVehicles(selectedVehicles, { onStarted, onError } = {}) {
-  return callStartStopService(selectedVehicles, 'CPFStart', 'cpf_control/StartStop', onStarted, onError);
+  return callStartStopService(selectedVehicles, 'control/cpf_controller/start_cpf', 'farol2_cpf_controller/srv/StartStop', onStarted, onError);
 }
 
 function stopCPFForSelectedVehicles(selectedVehicles, { onStopped, onError } = {}) {
-  return callStartStopService(selectedVehicles, 'CPFStop', 'cpf_control/StartStop', onStopped, onError);
+  return callStartStopService(selectedVehicles, 'control/cpf_controller/stop_cpf', 'farol2_cpf_controller/srv/StartStop', onStopped, onError);
 }
 
 function startPFForSelectedVehicles(selectedVehicles, { onStarted, onError } = {}) {
-  return callStartStopService(selectedVehicles, 'control/path_following/Start', 'farol2_path_following/srv/StartPF', onStarted, onError);
+  return callStartStopService(selectedVehicles, 'path_following/Start', 'farol2_path_following/srv/StartPF', onStarted, onError);
 }
 
 function stopPFForSelectedVehicles(selectedVehicles, { onStopped, onError } = {}) {
-  return callStartStopService(selectedVehicles, 'control/path_following/Stop', 'farol2_path_following/srv/StopPF', onStopped, onError);
+  return callStartStopService(selectedVehicles, 'path_following/Stop', 'farol2_path_following/srv/StopPF', onStopped, onError);
 }
 
 function callStartStopService(selectedVehicles, serviceName, serviceType, onSuccess, onError) {
@@ -187,13 +190,13 @@ function callStartStopService(selectedVehicles, serviceName, serviceType, onSucc
   });
 }
 
-function sendGoalToVehicle(vehicleName, E, N, goalParams = { theta: 0, v: 0.01 }) {
+function sendGoalToVehicle(vehicleName, goal) {
   const request = {
     vehicle_name: vehicleName,
-    e: E,
-    n: N,
-    theta: (goalParams.theta ?? 0) * Math.PI / 180,
-    v: goalParams.v ?? 0.01
+    e: goal.E,
+    n: goal.N,
+    theta: (goal.yaw ?? 0) + Math.PI / 2,
+    v: goal.v ?? 0.01
   };
 
   return callServiceAsync('setGoal', request);
@@ -212,23 +215,31 @@ function sendStateToVehicle(vehicleName, vehicleState) {
 }
 
 function sendObstacles(obstacleIds, obstacles, { onSuccess, onError } = {}) {
-  const circ_obs = obstacleIds
-    .map((id) => {
-      const obs = obstacles[id];
-      return [obs.E, obs.N, obs.radius];
-    })
-    .flat();
+    const circ_obs = [];
+    const elip_obs = [];
 
-  const request = {
-    circ_obs,
-    line_obs: []
-  };
+    obstacleIds.forEach((id) => {
+        const obs = obstacles[id];
+        const isCircle = Math.abs(obs.a - obs.b) < 1e-1;
 
-  callService('setObstacles', request, (res) => {
-    onSuccess?.(res);
-  }, (err) => {
-    onError?.(err);
-  });
+        if (isCircle) {
+            circ_obs.push(obs.E, obs.N, obs.a); // radius == a == b when circular
+        } else {
+            elip_obs.push(obs.E, obs.N, obs.a, obs.b, obs.phi);
+        }
+    });
+
+    const request = {
+        circ_obs,
+        elip_obs,
+        line_obs: []
+    };
+
+    callService('setObstacles', request, (res) => {
+        onSuccess?.(res);
+    }, (err) => {
+        onError?.(err);
+    });
 }
 
 function runOptimization(selectedVehicles, { onStarted, onSuccess, onError, onStage } = {}) {
@@ -267,11 +278,10 @@ function cancelOptimization({ onSuccess, onError, onStage } = {}) {
 
 function applyBezierParams(params, { onSuccess, onError } = {}) {
   const request = {
-    bezier_degree: params.bezierDegree,
-    guess_degree: params.guessDegree,
-    n_split: params.nSplit,
-    constr_flags: params.constrFlags,
-    number_sample_Pts: params.numberSamplePts ?? 200
+    bezier_degree: params.bezier_degree,
+    guess_degree: params.guess_degree,
+    n_split: params.n_split,
+    constr_flags: params.constr_flags,
   };
 
   callService('setBezierParams', request, (result) => {
@@ -338,69 +348,3 @@ export {
   applyChanges,
   loadPlannerConfig
 };
-
-// export async function setGoal(vehicleName, north, east, theta, velocity) {
-//   const request = {
-//     vehicle_name: vehicleName,
-//     n: north,        // Changed from 'north' to 'n'
-//     e: east,         // Changed from 'east' to 'e'
-//     theta: theta,
-//     v: velocity
-//   };
-  
-//   return rosModule.callServiceAsync('setGoal', request);
-// }
-
-// export async function setBezierParams(degree, guessDeree, nSplit, constrFlags, numSamplePoints) {
-//   const request = {
-//     bezier_degree: degree,
-//     guess_degree: guessDeree,
-//     n_split: nSplit,           // Changed from 'nSplit'
-//     constr_flags: constrFlags, // Changed from 'constraintFlags'
-//     number_sample_pts: numSamplePoints
-//   };
-  
-//   return rosModule.callServiceAsync('setBezierParams', request);
-// }
-
-// export async function setBounds(bounds) {
-//   const request = {
-//     vel_min: bounds.vel_min,
-//     vel_max: bounds.vel_max,
-//     acc_min: bounds.acc_min,
-//     acc_max: bounds.acc_max,
-//     ang_vel_min: bounds.ang_vel_min,
-//     ang_vel_max: bounds.ang_vel_max,
-//     ang_acc_min: bounds.ang_acc_min,
-//     ang_acc_max: bounds.ang_acc_max,
-//     obs_min: bounds.obs_min,
-//     obs_max: bounds.obs_max,
-//     radius: bounds.radius,
-//     alpha: bounds.alpha,
-//     beta: bounds.beta,
-//     gamma: bounds.gamma
-//   };
-  
-//   return rosModule.callServiceAsync('setBounds', request);
-// }
-
-// export async function runOptimization(vehicleNames) {
-//   const request = {
-//     vehicle_names: vehicleNames || []
-//   };
-  
-//   return rosModule.callServiceAsync('runOptimization', request);
-// }
-
-// export async function setObstacles(circularObstacles, lineObstacles) {
-//   const request = {
-//     circ_obs: circularObstacles || [],
-//     line_obs: lineObstacles || []
-//   };
-  
-//   return rosModule.callServiceAsync('setObstacles', request);
-// }
-
-// export async function getPlannerConfig() {
-//   return rosModule.callServiceAsync('getPlannerConfig', {});
-// }

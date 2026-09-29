@@ -33,6 +33,17 @@ let handleDragGoalId = null;
 
 const VELOCITY_ARROW_SCALE = 40; // world meters of arrow length per 1 m/s of surge
 
+// Tweak these and reload to change the look of the ruler
+const RULER_CONFIG = {
+  targetPx: 120,     // desired on-screen length; the real length snaps to a round value near this
+  marginX: 20,       // distance from the left edge of the canvas
+  marginY: 20,       // distance from the bottom edge of the canvas
+  tickHeight: 8,     // height of the end ticks
+  lineWidth: 2,
+  color: 'black',
+  font: '12px Arial'
+};
+
 const background = new Image();
 background.src = 'assets/map_expo_color.png';
 let backgroundLoaded = false;
@@ -89,6 +100,13 @@ function canvasToWorld(cx, cy) {
   return { E, N };
 }
 
+function niceLength(meters) {
+  const pow = Math.pow(10, Math.floor(Math.log10(meters)));
+  const f = meters / pow;
+  const nice = f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10;
+  return nice * pow;
+}
+
 function setSelectedVehicle(vehicleName) {
   selectedVehicle = vehicleName;
 }
@@ -116,51 +134,78 @@ function drawBackground() {
   ctx.drawImage(background, x1, y1, width, height);
 }
 
+function drawRuler() {
+  const pxPerMeter = scale * scaleFactor;              // on-screen pixels per meter
+  const meters = niceLength(RULER_CONFIG.targetPx / pxPerMeter);
+  const lengthPx = meters * pxPerMeter;
+
+  const label = meters >= 1000
+    ? `${parseFloat((meters / 1000).toPrecision(3))} km`
+    : `${parseFloat(meters.toPrecision(3))} m`;
+
+  const x0 = RULER_CONFIG.marginX;
+  const x1 = x0 + lengthPx;
+  const y = canvas.height - RULER_CONFIG.marginY;
+  const t = RULER_CONFIG.tickHeight;
+
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);                  // draw in screen pixels, ignoring pan/zoom
+
+  ctx.beginPath();
+  ctx.moveTo(x0, y);
+  ctx.lineTo(x1, y);
+  ctx.moveTo(x0, y - t / 2);
+  ctx.lineTo(x0, y + t / 2);
+  ctx.moveTo(x1, y - t / 2);
+  ctx.lineTo(x1, y + t / 2);
+  ctx.lineWidth = RULER_CONFIG.lineWidth;
+  ctx.strokeStyle = RULER_CONFIG.color;
+  ctx.stroke();
+
+  ctx.fillStyle = RULER_CONFIG.color;
+  ctx.font = RULER_CONFIG.font;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(label, (x0 + x1) / 2, y - t);
+
+  ctx.restore();
+}
+
 function drawGoal(goal, color, id, isSelected) {
-
-  console.log("GOAL OBJECT:", goal);
-  console.log("GOAL E/N:", goal.E, goal.N);
-  console.log("GOAL YAW:", goal.yaw);
-  console.log("GOAL V:", goal.v);
-  console.log("SELECTED:", isSelected);
-
   const yaw = goal.yaw ?? 0;
   const v = goal.v ?? 0.01;
 
   const p = worldToCanvas(goal.E, goal.N);
   ctx.save();
   ctx.translate(p.cx, p.cy);
-  ctx.rotate((goal.yaw ?? 0));
 
-  
+  const s = 7 / scaleFactor;   // half-size of the x
 
-  ctx.beginPath();
-  ctx.moveTo(12 / scaleFactor, 0);
-  ctx.lineTo(-6 / scaleFactor, 6 / scaleFactor);
-  ctx.lineTo(-6 / scaleFactor, -6 / scaleFactor);
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
-
-  if (isSelected) {
-    ctx.lineWidth = 1.5 / scaleFactor;
-    ctx.strokeStyle = 'yellow';
+  const strokeX = (width, style) => {
+    ctx.beginPath();
+    ctx.moveTo(-s, -s);
+    ctx.lineTo(s, s);
+    ctx.moveTo(-s, s);
+    ctx.lineTo(s, -s);
+    ctx.lineWidth = width;
+    ctx.strokeStyle = style;
+    ctx.lineCap = 'round';
     ctx.stroke();
-  }
+  };
 
-  ctx.beginPath();
-  ctx.arc(-6 / scaleFactor, 0, 6 / scaleFactor, 0, 2 * Math.PI);
-  ctx.fillStyle = color;
-  ctx.fill();
-  
-  const fontSize = 10 / scaleFactor;
-  ctx.rotate(Math.PI / 2);
+  if (isSelected) strokeX(6 / scaleFactor, 'yellow');   // outline
+  strokeX(3 / scaleFactor, color);                      // the x itself
+
+  const fontSize = 15 / scaleFactor;
+  //ctx.rotate(Math.PI / 2);
   ctx.fillStyle = 'white';
   ctx.font = `bold ${fontSize}px Arial`;
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(id, 0, 3 / scaleFactor);
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(id, 0, -s - 3 / scaleFactor);
+
   ctx.restore();
+
   if (isSelected) {
     drawArrow({ E: goal.E, N: goal.N, yaw: yaw, v: v });
   }
@@ -187,13 +232,16 @@ function drawVehicle(veh, isSelected) {
     ctx.stroke();
   }
 
-  const fontSize = 10 / scaleFactor;
-  ctx.rotate(Math.PI / 2);
+  ctx.rotate(-veh.yaw);   // cancel the vehicle rotation so the label stays upright
+
+  const s = 7 / scaleFactor;
+  const fontSize = 15 / scaleFactor;
   ctx.fillStyle = 'white';
   ctx.font = `bold ${fontSize}px Arial`;
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(veh.id, 0, 0);
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(veh.id, 0, -s - 3 / scaleFactor);
+
   ctx.restore();
 
   if (isSelected) {
@@ -213,7 +261,7 @@ function drawObstacle(obs, id, isSelected) {
   ctx.translate(cx, cy);
   ctx.rotate(screenPhi);
 
-  if (obstacleImg.complete) {
+  if (false){//obstacleImg.complete) {
     ctx.drawImage(obstacleImg, -pxA, -pxB, pxA * 2, pxB * 2);
   } else {
     ctx.beginPath();
@@ -313,6 +361,18 @@ function findVehicleAt(E, N, vehicles, toleranceMeters = 5) {
       return name;
     }
   }
+  return null;s
+}
+
+function findGoalAt(E, N, goals, toleranceMeters = 5) {
+  for (const name in goals) {
+    const v = goals[name];
+    const dx = v.E - E;
+    const dy = v.N - N;
+    if (Math.sqrt(dx * dx + dy * dy) < toleranceMeters / scaleFactor) {
+      return name;
+    }
+  }
   return null;
 }
 
@@ -340,6 +400,8 @@ function drawAllObjects({ goals = {}, vehicles = {}, plannedTrajectories = {}, e
   ctx.scale(scaleFactor, scaleFactor);
 
   drawBackground();
+
+  drawRuler();
 
   for (const name in goals) {
     const g = goals[name];
@@ -578,6 +640,7 @@ export {
   worldToCanvas,
   canvasToWorld,
   findVehicleAt,
+  findGoalAt,
   findObstacleAt,
   setSelectedVehicle,
   getSelectedVehicle,

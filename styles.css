@@ -232,7 +232,7 @@ h4.separator {
 }
 
 #nodeLogContainer {
-  height: 300px;            /* desired fixed height */
+  height: 500px;            /* desired fixed height */
   min-height: 0;           /* important in flex layouts */
   flex: none;              /* prevent flex-grow */
   
@@ -245,7 +245,7 @@ h4.separator {
   box-sizing: border-box;
 
   font-family: monospace;
-  font-size: 10px;
+  font-size: 14px;
   color: #0f0;
 }
 

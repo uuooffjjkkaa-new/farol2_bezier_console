@@ -82,51 +82,65 @@ function openTab(tabId, event) {
 }
 
 function addLog(message) {
-  const log = document.getElementById('nodeLog');
-  if (!log) return;
+  const logs = document.querySelectorAll('.nodeLog');
+  if (!logs.length) return;
 
-  const entry = document.createElement('div');
-  entry.className = 'log-entry';
-  entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-  log.appendChild(entry);
-  log.parentElement.scrollTop = log.parentElement.scrollHeight;
+  const text = `[${new Date().toLocaleTimeString()}] ${message}`;
+  logs.forEach(log => {
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.textContent = text;
+    log.appendChild(entry);
+    log.parentElement.scrollTop = log.parentElement.scrollHeight;
+  });
 }
 
 function setStage(stageId, state) {
-  const stage = document.getElementById(stageId);
-  if (!stage) return;
-  stage.classList.remove('completed', 'running', 'error', 'idle');
-  stage.classList.add(state);
+  const stages = document.querySelectorAll(`.${stageId}`);
+  if (!stages.length) return;
+  stages.forEach(stage => {
+    stage.classList.remove('completed', 'running', 'error', 'idle');
+    stage.classList.add(state);
+  });
 }
 
 function updateVehicleCheckboxList(vehicleNames, onSelectionChange) {
-  const container = document.getElementById('vehicleList');
-  if (!container) return;
-  container.innerHTML = '';
+  const containers = document.querySelectorAll('.vehicleList');
+  if (!containers.length) return;
 
-  vehicleNames.forEach((name) => {
-    const div = document.createElement('div');
-    div.style.display = 'flex';
-    div.style.alignItems = 'center';
-    div.style.marginRight = '12px';
+  containers.forEach(container => {
+    container.innerHTML = '';
 
-    const label = document.createElement('label');
-    label.style.marginRight = '6px';
-    label.textContent = name;
+    vehicleNames.forEach((name) => {
+      const div = document.createElement('div');
+      div.style.display = 'flex';
+      div.style.alignItems = 'center';
+      div.style.marginRight = '12px';
 
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.id = `chk_${name}`;
-    checkbox.checked = selectedVehiclesSet.has(name);
-    checkbox.addEventListener('change', () => {
-      if (checkbox.checked) selectedVehiclesSet.add(name);
-      else selectedVehiclesSet.delete(name);
-      onSelectionChange?.(Array.from(selectedVehiclesSet));
+      const label = document.createElement('label');
+      label.style.marginRight = '6px';
+      label.textContent = name;
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.dataset.vehicle = name;
+      checkbox.checked = selectedVehiclesSet.has(name);
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) selectedVehiclesSet.add(name);
+        else selectedVehiclesSet.delete(name);
+
+        // keep the copies in the other tab in sync
+        document.querySelectorAll('.vehicleList input[type="checkbox"]').forEach(other => {
+          if (other.dataset.vehicle === name) other.checked = checkbox.checked;
+        });
+
+        onSelectionChange?.(Array.from(selectedVehiclesSet));
+      });
+
+      div.appendChild(label);
+      div.appendChild(checkbox);
+      container.appendChild(div);
     });
-
-    div.appendChild(label);
-    div.appendChild(checkbox);
-    container.appendChild(div);
   });
 }
 
@@ -206,6 +220,14 @@ function populatePlannerConfig(config) {
   document.getElementById('c3').checked = !!config.constr_flags?.[3];
 }
 
+function deselectVehicle(name) {
+  selectedVehiclesSet.delete(name);
+}
+
+function clearSelectedVehicles() {
+  selectedVehiclesSet.clear();
+}
+
 export {
   initUI,
   openTab,
@@ -217,5 +239,7 @@ export {
   getObstacleRadius,
   getBezierParamsFromUI,
   getBoundsAndGainsFromUI,
-  populatePlannerConfig
+  populatePlannerConfig,
+  clearSelectedVehicles,
+  deselectVehicle
 };

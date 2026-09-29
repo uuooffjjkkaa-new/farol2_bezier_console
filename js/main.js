@@ -24,6 +24,7 @@ import {
   setHandleDragOccurred,
   canvasToWorld,
   findVehicleAt,
+  findGoalAt,
   findObstacleAt,
   zoomCanvas,
   beginDrag,
@@ -60,7 +61,9 @@ import {
   getObstacleRadius,
   getBezierParamsFromUI,
   getBoundsAndGainsFromUI,
-  populatePlannerConfig
+  populatePlannerConfig,
+  clearSelectedVehicles,
+  deselectVehicle
 } from './ui.js';
 
 import {
@@ -86,7 +89,7 @@ let knownVehicles = [];
 let rosConnections = [];
 let lastPlanningHeartbeat = Date.now();
 let nextObstacleId = 0;
-let nextVehicleId = 0;
+// let nextVehicleId = 0;
 let isExecutingMission = false;
 let sim_active_flag = false;
 
@@ -109,26 +112,35 @@ function updateVehicleCheckboxUI() {
 }
 
 function isUsingSimState() {
-    return document.getElementById('useSimState').checked;
+  return document.getElementById('useSimState').checked;
+}
+
+
+function smallestFreeVehicleIndex() {
+  let i = 0;
+  while (`mred${i}` in vehicles) i++;
+  return i;
 }
 
 function addVehicleAtCenter() {
-    const id = `mred${nextVehicleId}`;
-    nextVehicleId += 1;
-    vehicles[id] = {
-        E: centerEasting,
-        N: centerNorthing,
-        yaw: 0.0,
-        v: 0.01,
-        color: vehicleColor(id),
-        id: nextVehicleId - 1
-    };
-    setSelectedVehicleInternal(id);
-    setSelectedObstacleInternal(null);
-    knownVehicles.push(id);
-    updateVehicleCheckboxUI();
-    setStage('stageOptimization', 'pending');
-    drawScene();
+  const idx = smallestFreeVehicleIndex();
+  const id = `mred${idx}`;
+  vehicles[id] = {
+    E: centerEasting,
+    N: centerNorthing,
+    yaw: 0.0,
+    v: 0.01,
+    color: vehicleColor(id),
+    id: idx
+  };
+  setSelectedVehicleInternal(id);
+  setSelectedObstacleInternal(null);
+  if (!knownVehicles.includes(id)) knownVehicles.push(id);
+  knownVehicles.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  updateVehicleCheckboxUI();
+  setStage('stageOptimization', 'pending');
+  drawScene();
+  saveMapState({ vehicles, obstacles, goals });
 }
 
 function syncLoadedMapState() {
@@ -256,7 +268,9 @@ function handleCanvasClick(event) {
     const { E, N } = canvasToWorld(cx, cy);
 
     const clickedVehicle = findVehicleAt(E, N, vehicles);
+    const clickedGoal = findGoalAt(E, N, goals);
     const clickedObstacle = findObstacleAt(E, N, obstacles, obstacleIds);
+
 
     if (clickedVehicle) {
         setSelectedVehicleInternal(clickedVehicle);
@@ -264,14 +278,27 @@ function handleCanvasClick(event) {
         if (isUsingSimState()) {
             sendStateToVehicle(clickedVehicle, vehicles[clickedVehicle]);
         }
+        drawScene();
+        return;
+    }
+
+    if (clickedGoal) {
+        setSelectedVehicleInternal(clickedGoal);
+        setSelectedObstacleInternal(null);
+        if (isUsingSimState()) {
+            sendStateToVehicle(clickedGoal, vehicles[clickedGoal]);
+        }
+        drawScene();
         return;
     }
 
     if (clickedObstacle) {
         setSelectedObstacleInternal(clickedObstacle);
         setSelectedVehicleInternal(null);
+        drawScene();
         return;
     }
+
 
     if (selectedVehicle) {
         const v = vehicles[selectedVehicle];
@@ -331,7 +358,7 @@ function handleCanvasRightClick(event) {
     saveMapState({ vehicles, obstacles, goals });
 
     sendGoalToVehicle(selectedVehicle, goals[selectedVehicle])
-        .then(() => addLog(`Goal sent to ${selectedVehicle}`))
+        .then(true)
         .catch((err) => console.error('Goal send failed', err));
 }
 
@@ -418,29 +445,36 @@ function removeAllObstacles() {
     sendObstacleData();
 }
 
+function purgeVehicle(id) {
+  delete vehicles[id];
+  delete goals[id];
+  delete plannedTrajectories[id];
+  delete executionSamples[id];
+  visibleTrajectories.delete(id);
+  deselectVehicle(id);
+  const k = knownVehicles.indexOf(id);
+  if (k !== -1) knownVehicles.splice(k, 1);
+}
+
 function removeVehicle() {
   if (!selectedVehicle) {
     alert('No vehicle is currently selected.');
     return;
   }
-  delete vehicles[selectedVehicle];
-  delete goals[selectedVehicle];
-  delete plannedTrajectories[selectedVehicle];
-  visibleTrajectories.delete(selectedVehicle);
+  purgeVehicle(selectedVehicle);
   setSelectedVehicleInternal(null);
+  updateVehicleCheckboxUI();
   drawScene();
+  saveMapState({ vehicles, obstacles, goals });
 }
 
 function removeAllVehicles() {
-    Object.keys(vehicles).forEach((id) => {
-        delete vehicles[id];
-        delete goals[id];
-        delete plannedTrajectories[id];
-        visibleTrajectories.delete(id);
-    });
-    knownVehicles.length = 0;
-    setSelectedVehicleInternal(null);
-    drawScene();
+  Object.keys(vehicles).forEach(purgeVehicle);
+  knownVehicles.length = 0;
+  setSelectedVehicleInternal(null);
+  updateVehicleCheckboxUI();
+  drawScene();
+  saveMapState({ vehicles, obstacles, goals });
 }
 
 function sendObstacleData() {
@@ -458,19 +492,19 @@ function sendObstacleData() {
 }
 
 function addTrajectoriesForSelectedVehicles() {
-  const selected = getSelectedVehicles();
+  const selected = getSelectedVehicles().filter((n) => n in vehicles);
   selected.forEach((name) => visibleTrajectories.add(name));
   drawScene();
 }
 
 function removeTrajectoriesForSelectedVehicles() {
-  const selected = getSelectedVehicles();
+  const selected = getSelectedVehicles().filter((n) => n in vehicles);
   selected.forEach((name) => visibleTrajectories.delete(name));
   drawScene();
 }
 
 function deployMission() {
-  const selected = getSelectedVehicles();
+  const selected = getSelectedVehicles().filter((n) => n in vehicles);
   if (!selected.length) {
     alert('Please select at least one vehicle.');
     return;
@@ -494,7 +528,7 @@ function deployMission() {
 }
 
 function runOptimizationHandler() {
-  const selected = getSelectedVehicles();
+  const selected = getSelectedVehicles().filter((n) => n in vehicles);
   runOptimization(selected, {
     onStarted: () => setStage('stageOptimization', 'running'),
     onSuccess: (res) => {
@@ -546,9 +580,9 @@ function applyChangesHandler() {
     boundParams: bounds,
     gains
   }, {
-    onBezierSuccess: (result) => addLog(`Bezier params set: ${result.message}`),
+    // onBezierSuccess: (result) => addLog(`Bezier params set: ${result.message}`),
     onBezierError: (err) => console.error('Bezier params error', err),
-    onBoundsSuccess: (result) => addLog(`Bounds set: ${result.message}`),
+    // onBoundsSuccess: (result) => addLog(`Bounds set: ${result.message}`),
     onBoundsError: (err) => console.error('Bounds error', err)
   });
 }

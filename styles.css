@@ -52,7 +52,7 @@ button {
   margin: 4px 0;
   border: none;
   border-radius: 6px;
-  background-color: #4CAF50;
+  background-color: #6CE0B2;
   color: white;
   font-weight: bold;
   cursor: pointer;
@@ -61,13 +61,13 @@ button {
 }
 
 button:hover {
-  background-color: #45a049;
+  background-color: #6CE0B2;
   transform: translateY(-1px);
 }
 
 button:active {
   transform: translateY(0);
-  background-color: #3e8e41;
+  background-color: #6CE0B2;
 }
 
 /* Small button */
@@ -97,11 +97,11 @@ h4.separator {
 }
 
 .start-btn {
-  background-color: #4CAF50;
+  background-color: #6CE0B2;
 }
 
 .stop-btn {
-  background-color: #f44336;
+  background-color: #b60404;
 }
 
 .control-box {
@@ -119,11 +119,11 @@ h4.separator {
 
 /* Optional button colors */
 .run-btn {
-  background-color: #4CAF50;
+  background-color: #6CE0B2;
 }
 
 .cancel-btn {
-  background-color: #f44336;
+  background-color: #b60404;
 }
 
 /* Panel layout */
@@ -143,11 +143,11 @@ h4.separator {
 
 /* Button colors */
 .run-btn, .start-btn {
-  background-color: #4CAF50;
+  background-color: #6CE0B2;
 }
 
 .cancel-btn, .stop-btn {
-  background-color: #f44336;
+  background-color: #b60404;
 }
 
 .deploy-btn {
@@ -209,7 +209,7 @@ h4.separator {
 
 
 .stage.completed {
-  background-color: #4CAF50;
+  background-color: #6CE0B2;
   color: white;
 }
 

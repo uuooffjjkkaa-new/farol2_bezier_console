@@ -193,9 +193,12 @@ function refreshVehicleList() {
               color: vehicleColor(name),
               id: vehicleNumber(name)
             };
+            console.log(`[refreshVehicleList] created ${name} at E=${vehicles[name].E} N=${vehicles[name].N} | origin centerEasting=${centerEasting} centerNorthing=${centerNorthing}`);
           }
 
           if (!subscribedVehicles.has(name)) {
+            console.log(`[refreshVehicleList] subscribing to state for ${name}`);
+
             subscribePlannedTrajectory((msg) => {
               plannedTrajectories[name] = msg.poses.map((pose) => ({
                 E: pose.pose.position.y,
@@ -215,6 +218,7 @@ function refreshVehicleList() {
               vehicles[name].N = msg.y;
               vehicles[name].yaw = (msg.yaw * Math.PI / 180) - Math.PI / 2;
               vehicles[name].v = msg.u;
+              console.log(`[subscribeVehicleState] ${name} E=${vehicles[name].E} N=${vehicles[name].N} | origin centerEasting=${centerEasting} centerNorthing=${centerNorthing}`);
               drawScene();
             });
 
@@ -251,7 +255,6 @@ function refreshVehicleList() {
     });
 
     updateVehicleCheckboxUI();
-  
   }
 }
 
@@ -451,6 +454,7 @@ function purgeVehicle(id) {
   delete plannedTrajectories[id];
   delete executionSamples[id];
   visibleTrajectories.delete(id);
+  subscribedVehicles.delete(id);
   deselectVehicle(id);
   const k = knownVehicles.indexOf(id);
   if (k !== -1) knownVehicles.splice(k, 1);
@@ -470,7 +474,6 @@ function removeVehicle() {
 
 function removeAllVehicles() {
   Object.keys(vehicles).forEach(purgeVehicle);
-  knownVehicles.length = 0;
   setSelectedVehicleInternal(null);
   updateVehicleCheckboxUI();
   drawScene();

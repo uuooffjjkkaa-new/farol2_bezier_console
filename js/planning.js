@@ -225,7 +225,7 @@ function sendObstacles(obstacleIds, obstacles, { onSuccess, onError } = {}) {
         if (isCircle) {
             circ_obs.push(obs.E, obs.N, obs.a); // radius == a == b when circular
         } else {
-            elip_obs.push(obs.E, obs.N, obs.a, obs.b, obs.phi);
+            elip_obs.push(obs.E, obs.N, obs.a, obs.b, -obs.phi);
         }
     });
 
@@ -280,9 +280,13 @@ function applyBezierParams(params, { onSuccess, onError } = {}) {
   const request = {
     bezier_degree: params.bezier_degree,
     guess_degree: params.guess_degree,
+    guess_active: params.guess_active,
     n_split: params.n_split,
     constr_flags: params.constr_flags,
   };
+
+  console.log('bezier params:', JSON.stringify(params));
+  console.log('bezier request:', JSON.stringify(request));
 
   callService('setBezierParams', request, (result) => {
     onSuccess?.(result);

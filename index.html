@@ -185,22 +185,22 @@
           <div style="flex:1;">
             <h4>Bounds</h4>
             <h5>Surge [m/s]</h5>
-            <div class="inputRow"><label>min: </label> <input id="vel_min" type="number" class="big" step="0.001" value="0.001" style="margin-left: 14px;"></div>
-            <div class="inputRow"><label>max: </label> <input id="vel_max" type="number" class="big" step="0.001" value="0.3" style="margin-left: 10px;"></div>
+            <div class="inputRow"><label>min: </label> <input id="vel_min" type="number" class="big" step="0.1" value="0.01" style="margin-left: 14px;"></div>
+            <div class="inputRow"><label>max: </label> <input id="vel_max" type="number" class="big" step="0.1" value="1.0" style="margin-left: 10px;"></div>
             <h5>Linear acceleration [m/s^2]</h5>
-            <div class="inputRow"><label>min:</label> <input id="acc_min" type="number" class="big" step="0.01" value="-0.03" style="margin-left: 14px;"></div>
-            <div class="inputRow"><label>max:</label> <input id="acc_max" type="number" class="big" step="0.01" value="0.03" style="margin-left: 10px;"></div>
+            <div class="inputRow"><label>min:</label> <input id="acc_min" type="number" class="big" step="0.1" value="-0.2" style="margin-left: 14px;"></div>
+            <div class="inputRow"><label>max:</label> <input id="acc_max" type="number" class="big" step="0.1" value="0.2" style="margin-left: 10px;"></div>
             <h5>Yaw-rate [rad/s]</h5>
-            <div class="inputRow"><label>min:</label> <input id="ang_vel_min" type="number" class="big" step="0.01" value="-0.15" style="margin-left: 14px;"></div>
-            <div class="inputRow"><label>max:</label> <input id="ang_vel_max" type="number" class="big" step="0.01" value="0.15" style="margin-left: 10px;"></div>
+            <div class="inputRow"><label>min:</label> <input id="ang_vel_min" type="number" class="big" step="0.1" value="-0.4" style="margin-left: 14px;"></div>
+            <div class="inputRow"><label>max:</label> <input id="ang_vel_max" type="number" class="big" step="0.1" value="0.4" style="margin-left: 10px;"></div>
             <h5>Angular acceleration[rad/s^2]</h5>
-            <div class="inputRow"><label>min:</label> <input id="ang_acc_min" type="number" class="big" step="0.001" value="-0.005" style="margin-left: 14px;"></div>
-            <div class="inputRow"><label>max:</label> <input id="ang_acc_max" type="number" class="big" step="0.001" value="0.005" style="margin-left: 10px;"></div>
+            <div class="inputRow"><label>min:</label> <input id="ang_acc_min" type="number" class="big" step="0.1" value="-0.1" style="margin-left: 14px;"></div>
+            <div class="inputRow"><label>max:</label> <input id="ang_acc_max" type="number" class="big" step="0.1" value="0.1" style="margin-left: 10px;"></div>
             <h5>Obstacle distance [m]</h5>
-            <div class="inputRow"><label>min:</label> <input id="obs_min" type="number" class="big" step="0.1" value="2.0" style="margin-left: 14px;"></div>
+            <div class="inputRow"><label>min:</label> <input id="obs_min" type="number" class="big" step="0.1" value="5.0" style="margin-left: 14px;"></div>
             <div class="inputRow"><label>max:</label> <input id="obs_max" type="number" class="big" step="0.1" value="10000.0" style="margin-left: 10px;"></div>
             <h5> Vehicle radius [m]</h5>
-            <input id="radius" type="number" class="big" step="0.1" value="1.5">
+            <input id="radius" type="number" class="big" step="0.1" value="3">
           </div>
 
           <div style="flex:1;">
@@ -208,13 +208,13 @@
             <div class="inputRow"><label>Time:</label> <input id="alpha" type="number" class="small" step="0.1" value="1.0" style="margin-left: 55px;"></div>
             <div class="inputRow"><label>Energy:</label> <input id="beta" type="number" class="small" step="0.1" value="1.0" style="margin-left: 40px;"></div>
             <div class="inputRow"><label>End points:</label> <input id="gamma" type="number" class="small" step="0.1" value="1.0" style="margin-left: 10px;"></div>
-            <h4>Bezier Parameters</h4>
+            <h4>Optimization Parameters</h4>
             <h5>
-              Bezier degree:
-              <input type="number" class="small" id="bezierDegree" value="9" min="1">
-              &nbsp;&nbsp;&nbsp;&nbsp;
-              Guess degree:
-              <input type="number" class="small" id="guessDegree" value="7" min="1">
+
+              <div class="inputRow"><label>Guess degree:</label> <input id="guessDegree" type="number" class="small" step="1" value="7" min="1" style="margin-left: 5px;"><label style="margin-left: 10px;">  Use guess:</label> <input id="guessed_opti" type="checkbox" class="small" style="margin-left: 5px;"></div>
+
+              <div class="inputRow"><label>Final degree:</label> <input id="bezierDegree" type="number" class="small" step="1" value="9" min="1" style="margin-left: 13px;"></div>
+              
             </h5>
             <h5>Split:</h5>
             <div id="nSplitInputs">

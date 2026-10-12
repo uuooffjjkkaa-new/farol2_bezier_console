@@ -8,8 +8,8 @@
 const canvas = document.getElementById('map');
 const ctx = canvas.getContext('2d');
 
-const centerEasting = 481685; //491899;
-const centerNorthing = 4282433; //4290842;
+const centerEasting = 491899;
+const centerNorthing = 4290842;
 const scale = 3;
 const ESizeMeters = 298;
 const NSizeMeters = 208;
@@ -206,9 +206,7 @@ function drawGoal(goal, color, id, isSelected) {
 
   ctx.restore();
 
-  if (isSelected) {
-    drawArrow({ E: goal.E, N: goal.N, yaw: yaw, v: v });
-  }
+  drawArrow({ E: goal.E, N: goal.N, yaw: yaw, v: v });
 }
 
 function drawVehicle(veh, isSelected) {
@@ -244,9 +242,8 @@ function drawVehicle(veh, isSelected) {
 
   ctx.restore();
 
-  if (isSelected) {
-    drawArrow(veh);
-  }
+
+  drawArrow(veh);
 }
 
 function drawObstacle(obs, id, isSelected) {
@@ -333,22 +330,37 @@ function drawArrow(obj) {
   const tipX = ocx + Math.cos(obj.yaw) * armLength;
   const tipY = ocy + Math.sin(obj.yaw) * armLength;
 
+  const headLength = 12 / scaleFactor;
+  const headWidth = 5 / scaleFactor;   // half-width of the base
+
+  // Stop the shaft at the base of the head so it doesn't poke through the tip
+  const baseX = tipX - Math.cos(obj.yaw) * headLength;
+  const baseY = tipY - Math.sin(obj.yaw) * headLength;
+
   ctx.save();
   ctx.strokeStyle = '#e63946';
+  ctx.fillStyle = '#e63946';
   ctx.lineWidth = 2 / scaleFactor;
-  ctx.beginPath();
-  ctx.moveTo(ocx, ocy);
-  ctx.lineTo(tipX, tipY);
-  ctx.stroke();
 
   ctx.beginPath();
-  ctx.arc(tipX, tipY, 6 / scaleFactor, 0, 2 * Math.PI);
-  ctx.fillStyle = '#e63946';
+  ctx.moveTo(ocx, ocy);
+  ctx.lineTo(baseX, baseY);
+  ctx.stroke();
+
+  ctx.save();
+  ctx.translate(tipX, tipY);
+  ctx.rotate(obj.yaw);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(-headLength, -headWidth);
+  ctx.lineTo(-headLength, headWidth);
+  ctx.closePath();
   ctx.fill();
+  ctx.restore();
 
   ctx.fillStyle = '#000';
   ctx.font = `${12 / scaleFactor}px sans-serif`;
-  ctx.fillText(`${obj.v.toFixed(2)} m/s`, tipX + 8 / scaleFactor, tipY - 8 / scaleFactor);
+  ctx.fillText(`${obj.v.toFixed(2)} m/s`, tipX, tipY - 8 / scaleFactor);
   ctx.restore();
 }
 
@@ -439,7 +451,7 @@ function zoomCanvas(event) {
 
   const zoomAmount = -event.deltaY * 0.001;
   const oldScale = scaleFactor;
-  scaleFactor = Math.max(0.5, Math.min(3, scaleFactor + zoomAmount));
+  scaleFactor = Math.max(0.1, Math.min(10, scaleFactor + zoomAmount));
 
   const rect = canvas.getBoundingClientRect();
   const mx = event.clientX - rect.left;

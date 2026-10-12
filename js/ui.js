@@ -162,6 +162,7 @@ function getBezierParamsFromUI() {
   return {
     bezier_degree: parseInt(document.getElementById('bezierDegree').value),
     guess_degree: parseInt(document.getElementById('guessDegree').value),
+    guess_active: document.getElementById('guessed_opti').checked,
     n_split: Array.from(document.querySelectorAll('#nSplitInputs input')).map(input => parseInt(input.value, 10)),
     constr_flags: Array.from({length: 4}, (_, i) => document.getElementById(`c${i}`).checked)
   };

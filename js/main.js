@@ -552,7 +552,7 @@ function cancelOptimizationHandler() {
     onSuccess: (res) => {
       console.log(res.message);
       alert(res.message);
-      setStage('stageOptimization', 'idle');
+      setStage('stageOptimization', 'error');
     },
     onError: (err) => {
       console.error('Cancel failed', err);

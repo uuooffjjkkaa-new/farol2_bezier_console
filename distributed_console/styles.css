@@ -1,0 +1,264 @@
+/* ===== styles.css ===== */
+
+/* General input styling */
+/* Small input */
+input.small {
+  width: 40px;
+  padding: 4px 6px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 14px;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+/* Big input */
+input.big {
+  width: 100px;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 14px;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+/* Container for a pair of label + input */
+.inputPair {
+  display: flex;          /* Arrange label + input side by side */
+  flex-direction: column; /* Label on top, input below */
+  margin-right: 20px;     /* Space between pairs */
+  margin-bottom: 4px;    /* Space below the row */
+}
+
+/* Row of multiple pairs */
+.inputRow {
+  display: flex;           /* Put multiple pairs in a row */
+  flex-wrap: wrap;         /* Wrap if screen is too small */
+  width: auto;
+}
+
+
+/* Label spacing */
+label {
+  font-weight: 500;
+  display: block;
+  margin-top: 8px;
+}
+
+/* Button styles */
+button {
+  padding: 8px 14px;
+  margin: 4px 0;
+  border: none;
+  border-radius: 6px;
+  background-color: #6CE0B2;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+  font-size: 14px;
+}
+
+button:hover {
+  background-color: #6CE0B2;
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(0);
+  background-color: #6CE0B2;
+}
+
+/* Small button */
+button.smallBtn {
+  padding: 1px 8px;       /* smaller padding */
+  font-size: 12px;         /* smaller text */
+  border-radius: 4px;      /* slightly smaller corners */
+}
+
+/* Section headers */
+h3, h4, h5 {
+  margin-top: 4px;
+  margin-bottom: 2px;
+  font-family: sans-serif;
+}
+
+/* Separator line */
+h4.separator {
+  border-bottom: 1px solid #ccc;
+  color: transparent;
+  margin: 12px 0;
+}
+
+.cpf-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.start-btn {
+  background-color: #6CE0B2;
+}
+
+.stop-btn {
+  background-color: #b60404;
+}
+
+.control-box {
+  border: 1px solid #000000;
+  border-radius: 10px;
+  padding: 10px;
+  margin: 10px 0;
+  background-color: #f9f9f9;
+}
+
+.control-box h4 {
+  margin: 0 0 8px 0;
+  font-family: sans-serif;
+}
+
+/* Optional button colors */
+.run-btn {
+  background-color: #6CE0B2;
+}
+
+.cancel-btn {
+  background-color: #b60404;
+}
+
+/* Panel layout */
+.control-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 15px;
+  margin-top: 10px;
+}
+
+/* Button row */
+.button-row {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* Button colors */
+.run-btn, .start-btn {
+  background-color: #6CE0B2;
+}
+
+.cancel-btn, .stop-btn {
+  background-color: #b60404;
+}
+
+.deploy-btn {
+  background-color: #2196F3;
+}
+
+/* Tab buttons (independent of regular buttons) */
+.tabBtn {
+  flex: 1;
+  padding: 8px 12px;
+  cursor: pointer;
+  border: none;
+  background-color: rgb(231, 231, 231);
+  color: white;
+  font-weight: bold;
+  transition: background-color 0.2s, transform 0.1s;
+  font-size: 14px;
+  border-radius: 6px 6px 0 0; /* rounded top corners */
+  margin-right: 2px;           /* small spacing between tabs */
+}
+
+.tabBtn:hover {
+  background-color: black;
+}
+
+.tabBtn.activeTab {
+  background-color: white;
+  color: black;                 /* visible text */
+  border-bottom: 2px solid black;
+}
+
+.tabContent {
+  padding-top: 5px;
+  display: none;
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+  width: 100%;          /* ADD THIS */
+}
+
+.tabContent.activeContent {
+  display: block;
+  opacity: 1;
+}
+
+#planningTab {
+  width: 100%;
+}
+
+.stage {
+  padding: 8px;
+  border: 1px solid #666;
+  border-radius: 4px;
+  text-align: center;
+  white-space: normal;
+  background-color: white;   /* default look */
+  color: black;
+  transition: background-color 0.3s ease;
+}
+
+
+.stage.completed {
+  background-color: #6CE0B2;
+  color: white;
+}
+
+.stage.error {
+  background-color: #b60404;
+  color: white;
+}
+
+.stage.running {
+  animation: blinkYellow 1s infinite;
+}
+
+.stage.running #executionProgress {
+  animation: none; /* stop blinking when showing progress */
+}
+
+@keyframes blinkYellow {
+  0%, 50%, 100% { background-color: #FFD700; }
+  25%, 75% { background-color: #FFFF99; }
+}
+
+#nodeLogContainer {
+  height: 500px;            /* desired fixed height */
+  min-height: 0;           /* important in flex layouts */
+  flex: none;              /* prevent flex-grow */
+  
+  border: 2px solid #444;
+  border-radius: 6px;
+  background-color: #111;
+  padding: 8px;
+  overflow-y: auto;        /* scroll vertically */
+  overflow-x: hidden;
+  box-sizing: border-box;
+
+  font-family: monospace;
+  font-size: 14px;
+  color: #0f0;
+}
+
+#nodeLog {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#nodeLogContainer::-webkit-scrollbar {
+  width: 6px;
+}
+#nodeLogContainer::-webkit-scrollbar-thumb {
+  background-color: #888;
+  border-radius: 3px;
+}

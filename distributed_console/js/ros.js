@@ -25,15 +25,44 @@ const missionStrings = {};
 const serviceClients = {};
 
 const serviceConfigs = {
-  setGoal: { name: '/farol2_motion_planning/set_goal', serviceType: 'farol2_motion_planning/srv/SetState' },
-  setBezierParams: { name: '/farol2_motion_planning/set_bezier_params', serviceType: 'farol2_motion_planning/srv/SetBezierParams' },
-  setBounds: { name: '/farol2_motion_planning/set_bounds', serviceType: 'farol2_motion_planning/srv/SetBoundsAndGains' },  // Changed from SetBoundsandGains
-  runOptimization: { name: '/farol2_motion_planning/run_optimization', serviceType: 'farol2_motion_planning/srv/RunOptimization' },
-  cancelOptimization: { name: '/farol2_motion_planning/cancel_optimization', serviceType: 'std_srvs/srv/Trigger' },
-  setStates: { name: '/farol2_motion_planning/set_states', serviceType: 'farol2_motion_planning/srv/SetState' },
-  setObstacles: { name: '/farol2_motion_planning/set_obstacles', serviceType: 'farol2_motion_planning/srv/SetObstacles' },
-  getPlannerConfig: { name: '/farol2_motion_planning/get_planner_config', serviceType: 'farol2_motion_planning/srv/GetPlannerConfig' }
+  runOptimization: {
+    name: '/farol2_motion_planning/run_optimization',
+    serviceType: 'farol2_motion_planning/srv/RunOptimization'
+  },
+  cancelOptimization: {
+    name: '/farol2_motion_planning/cancel_optimization',
+    serviceType: 'std_srvs/srv/Trigger'
+  }
 };
+
+const vehicleServiceConfigs = {
+  setGoal: {
+    suffix: 'set_goal',
+    serviceType: 'farol2_motion_planning/srv/SetState'
+  },
+  setBezierParams: {
+    suffix: 'set_bezier_params',
+    serviceType: 'farol2_motion_planning/srv/SetBezierParams'
+  },
+  setBounds: {
+    suffix: 'set_bounds',
+    serviceType: 'farol2_motion_planning/srv/SetBoundsAndGains'
+  },
+  setStates: {
+    suffix: 'set_states',
+    serviceType: 'farol2_motion_planning/srv/SetState'
+  },
+  setObstacles: {
+    suffix: 'set_obstacles',
+    serviceType: 'farol2_motion_planning/srv/SetObstacles'
+  },
+  getPlannerConfig: {
+    suffix: 'get_planner_config',
+    serviceType: 'farol2_motion_planning/srv/GetPlannerConfig'
+  }
+};
+
+const vehicleServiceClients = new Map();
 
 function createRosInstance(url) {
   if (!window.ROSLIB) {
@@ -111,6 +140,53 @@ function callService(key, request, onSuccess, onError) {
 function callServiceAsync(key, request) {
   return new Promise((resolve, reject) => {
     callService(key, request, resolve, reject);
+  });
+}
+
+function getVehicleServiceClient(key, vehicleName) {
+  const config = vehicleServiceConfigs[key];
+
+  if (!config) {
+    throw new Error(`Unknown vehicle service: ${key}`);
+  }
+
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(vehicleName || '')) {
+    throw new Error(`Invalid vehicle name: ${vehicleName}`);
+  }
+
+  const ros = getRosConnection(DEFAULT_ROS_URLS[0]) || rosConnections[0];
+  if (!ros) {
+    throw new Error('ROS is not connected');
+  }
+
+  const cacheKey = `${ros.url}:${vehicleName}:${key}`;
+
+  if (!vehicleServiceClients.has(cacheKey)) {
+    vehicleServiceClients.set(
+      cacheKey,
+      createService({
+        ros,
+        name: `/distributed_planner/${vehicleName}/${config.suffix}`,
+        serviceType: config.serviceType
+      })
+    );
+  }
+
+  return vehicleServiceClients.get(cacheKey);
+}
+
+function callVehicleService(key, vehicleName, request, onSuccess, onError) {
+  const service = getVehicleServiceClient(key, vehicleName);
+  service.callService(
+    new window.ROSLIB.ServiceRequest(request),
+    onSuccess,
+    onError
+  );
+}
+
+function callVehicleServiceAsync(key, vehicleName, request) {
+  return new Promise((resolve, reject) => {
+    callVehicleService(key, vehicleName, request, resolve, reject);
   });
 }
 
@@ -251,8 +327,107 @@ function subscribeMissionString(ros, vehicleName, callback) {
   return topic;
 }
 
-function getMissionString(vehicleName) {
-  return missionStrings[vehicleName] || '';
+async function vehicleApi(path = '', options = {}) {
+  const response = await fetch(`/api/vehicles${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers
+    }
+  });
+
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.error || `Vehicle API failed (${response.status})`);
+  }
+  return result;
+}
+
+function launchVehicle(name) {
+  return vehicleApi('', {
+    method: 'POST',
+    body: JSON.stringify({ name })
+  });
+}
+
+function getLaunchedVehicles() {
+  return vehicleApi();
+}
+
+function stopVehicle(name) {
+  return vehicleApi(`/${encodeURIComponent(name)}`, { method: 'DELETE' });
+}
+
+function publishDistributedStartStop(vehicleNames, start) {
+  const ros = getRosConnection(DEFAULT_ROS_URLS[0]) || rosConnections[0];
+
+  if (!ros || !ros.isConnected) {
+    throw new Error('ROS is not connected; cannot send distributed command.');
+  }
+
+  const names = [...new Set(vehicleNames)]
+    .filter((name) => /^[A-Za-z][A-Za-z0-9_]*$/.test(name));
+
+  if (names.length === 0) {
+    throw new Error('No valid selected vehicle names.');
+  }
+
+  const topic = createTopic({
+    ros,
+    name: '/farol2_motion_planning/distributed_planner_node/start_stop_distributed',
+    messageType: 'farol2_motion_planning/msg/DistributedCommand'
+  });
+
+  topic.publish(new window.ROSLIB.Message({
+    vehicle_names: names,
+    start: Boolean(start)
+  }));
+
+  return names;
+}
+
+const discoveryServiceClients = new Map();
+
+function setVehicleDiscoveryMode(vehicleName, enabled) {
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(vehicleName || '')) {
+    return Promise.reject(new Error(`Invalid vehicle name: ${vehicleName}`));
+  }
+
+  const ros = getRosConnection(DEFAULT_ROS_URLS[0]) || rosConnections[0];
+  if (!ros) return Promise.reject(new Error('ROS is not connected'));
+
+  const serviceName =
+    `/farol2_motion_planning/distributed_planner_node/${vehicleName}/set_parameters`;
+
+  let service = discoveryServiceClients.get(serviceName);
+  if (!service) {
+    service = createService({
+      ros,
+      name: serviceName,
+      serviceType: 'rcl_interfaces/srv/SetParameters'
+    });
+    discoveryServiceClients.set(serviceName, service);
+  }
+
+  return new Promise((resolve, reject) => {
+    service.callService(
+      new window.ROSLIB.ServiceRequest({
+        parameters: [{
+          name: 'discovery_mode',
+          value: { type: 1, bool_value: enabled }
+        }]
+      }),
+      (response) => {
+        const result = response.results?.[0];
+        if (result && !result.successful) {
+          reject(new Error(result.reason || `Could not set discovery_mode for ${vehicleName}`));
+          return;
+        }
+        resolve(response);
+      },
+      reject
+    );
+  });
 }
 
 export {
@@ -280,7 +455,14 @@ export {
   callService,
   callServiceAsync,
   getServiceClient,
+  callVehicleService,
+  callVehicleServiceAsync,
   createRosInstance,
   createTopic,
-  createService
+  createService,
+  launchVehicle,
+  getLaunchedVehicles,
+  stopVehicle,
+  publishDistributedStartStop,
+  setVehicleDiscoveryMode
 };

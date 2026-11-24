@@ -11,10 +11,10 @@ import {
   missionStrings,
   callService,
   callServiceAsync,
-  getRosConnection,
   createTopic,
-  createRosInstance,
-  createService
+  createService,
+  callVehicleService,
+  callVehicleServiceAsync
 } from './ros.js';
 
 let isExecutingMission = false;
@@ -199,7 +199,7 @@ function sendGoalToVehicle(vehicleName, goal) {
     v: goal.v ?? 0.01
   };
 
-  return callServiceAsync('setGoal', request);
+  return callVehicleServiceAsync('setGoal', vehicleName, request);
 }
 
 function sendStateToVehicle(vehicleName, vehicleState) {
@@ -211,35 +211,75 @@ function sendStateToVehicle(vehicleName, vehicleState) {
     v: vehicleState.v
   };
 
-  return callServiceAsync('setStates', request);
+  return callVehicleServiceAsync('setStates', vehicleName, request);
 }
 
-function sendObstacles(obstacleIds, obstacles, { onSuccess, onError } = {}) {
-    const circ_obs = [];
-    const elip_obs = [];
+function sendObstacles(vehicleName, obstacleIds, obstacles, { onSuccess, onError } = {}) {
+  const circ_obs = [];
+  const elip_obs = [];
 
-    obstacleIds.forEach((id) => {
-        const obs = obstacles[id];
-        const isCircle = Math.abs(obs.a - obs.b) < 1e-1;
+  obstacleIds.forEach((id) => {
+    const obs = obstacles[id];
+    const isCircle = Math.abs(obs.a - obs.b) < 1e-1;
 
-        if (isCircle) {
-            circ_obs.push(obs.E, obs.N, obs.a); // radius == a == b when circular
-        } else {
-            elip_obs.push(obs.E, obs.N, obs.a, obs.b, -obs.phi);
-        }
-    });
+    if (isCircle) {
+      circ_obs.push(obs.E, obs.N, obs.a);
+    } else {
+      elip_obs.push(obs.E, obs.N, obs.a, obs.b, -obs.phi);
+    }
+  });
 
-    const request = {
-        circ_obs,
-        elip_obs,
-        line_obs: []
-    };
+  const request = { circ_obs, elip_obs, line_obs: [] };
 
-    callService('setObstacles', request, (res) => {
-        onSuccess?.(res);
-    }, (err) => {
-        onError?.(err);
-    });
+  callVehicleService('setObstacles', vehicleName, request, onSuccess, onError);
+}
+
+function applyBezierParams(vehicleName, params, { onSuccess, onError } = {}) {
+  const request = {
+    bezier_degree: params.bezier_degree,
+    guess_degree: params.guess_degree,
+    guess_active: params.guess_active,
+    n_split: params.n_split,
+    constr_flags: params.constr_flags
+  };
+
+  callVehicleService('setBezierParams', vehicleName, request, onSuccess, onError);
+}
+
+function applyBounds(vehicleName, bounds, gains, { onSuccess, onError } = {}) {
+  const request = {
+    vel_min: bounds.vel_min,
+    vel_max: bounds.vel_max,
+    acc_min: bounds.acc_min,
+    acc_max: bounds.acc_max,
+    ang_vel_min: bounds.ang_vel_min,
+    ang_vel_max: bounds.ang_vel_max,
+    ang_acc_min: bounds.ang_acc_min,
+    ang_acc_max: bounds.ang_acc_max,
+    obs_min: bounds.obs_min,
+    obs_max: bounds.obs_max,
+    radius: bounds.radius,
+    alpha: gains.alpha,
+    beta: gains.beta,
+    gamma: gains.gamma
+  };
+
+  callVehicleService('setBounds', vehicleName, request, onSuccess, onError);
+}
+
+function applyChanges(vehicleName, params, callbacks = {}) {
+  applyBezierParams(vehicleName, params.bezierParams, {
+    onSuccess: callbacks.onBezierSuccess,
+    onError: callbacks.onBezierError
+  });
+  applyBounds(vehicleName, params.boundParams, params.gains, {
+    onSuccess: callbacks.onBoundsSuccess,
+    onError: callbacks.onBoundsError
+  });
+}
+
+function loadPlannerConfig(vehicleName, { onLoaded, onError } = {}) {
+  callVehicleService('getPlannerConfig', vehicleName, {}, onLoaded, onError);
 }
 
 function runOptimization(selectedVehicles, { onStarted, onSuccess, onError, onStage } = {}) {
@@ -271,63 +311,6 @@ function cancelOptimization({ onSuccess, onError, onStage } = {}) {
   callService('cancelOptimization', request, (res) => {
     onSuccess?.(res);
     onStage?.('idle');
-  }, (err) => {
-    onError?.(err);
-  });
-}
-
-function applyBezierParams(params, { onSuccess, onError } = {}) {
-  const request = {
-    bezier_degree: params.bezier_degree,
-    guess_degree: params.guess_degree,
-    guess_active: params.guess_active,
-    n_split: params.n_split,
-    constr_flags: params.constr_flags,
-  };
-
-  console.log('bezier params:', JSON.stringify(params));
-  console.log('bezier request:', JSON.stringify(request));
-
-  callService('setBezierParams', request, (result) => {
-    onSuccess?.(result);
-  }, (err) => {
-    onError?.(err);
-  });
-}
-
-function applyBounds(bounds, gains, { onSuccess, onError } = {}) {
-  const request = {
-    vel_min: bounds.vel_min,
-    vel_max: bounds.vel_max,
-    acc_min: bounds.acc_min,
-    acc_max: bounds.acc_max,
-    ang_vel_min: bounds.ang_vel_min,
-    ang_vel_max: bounds.ang_vel_max,
-    ang_acc_min: bounds.ang_acc_min,
-    ang_acc_max: bounds.ang_acc_max,
-    obs_min: bounds.obs_min,
-    obs_max: bounds.obs_max,
-    radius: bounds.radius,
-    alpha: gains.alpha,
-    beta: gains.beta,
-    gamma: gains.gamma
-  };
-
-  callService('setBounds', request, (res) => {
-    onSuccess?.(res);
-  }, (err) => {
-    onError?.(err);
-  });
-}
-
-function applyChanges(params, callbacks = {}) {
-  applyBezierParams(params.bezierParams, { onSuccess: callbacks.onBezierSuccess, onError: callbacks.onBezierError });
-  applyBounds(params.boundParams, params.gains, { onSuccess: callbacks.onBoundsSuccess, onError: callbacks.onBoundsError });
-}
-
-function loadPlannerConfig({ onLoaded, onError } = {}) {
-  callService('getPlannerConfig', {}, (result) => {
-    onLoaded?.(result);
   }, (err) => {
     onError?.(err);
   });

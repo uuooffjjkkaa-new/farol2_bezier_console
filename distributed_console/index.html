@@ -57,13 +57,22 @@
               
               <div class="control-box">
                 <h5>Vehicle</h5>
-                <div class="button-row">
-                  <button class="run-btn" type="button" data-action="addVehicle">Add</button>
-                  <div class="inputPair">
-                    <button class="cancel-btn" type="button" data-action="removeVehicle">Remove</button>
-                    <button class="cancel-btn" type="button" data-action="removeAllVehicles">Remove All</button>
-                  </div>
+                <div class="inputRow">
+                  <label for="vehicle-name">Name:</label>
+                  <input
+                    id="vehicle-name"
+                    name="vehicle-name"
+                    required
+                    pattern="[A-Za-z][A-Za-z0-9_]{0,63}"
+                    placeholder="e.g. mred0"
+                    title="Start with a letter; use only letters, digits, and underscores."
+                  />
                 </div>
+                <div class="button-row">
+                  <button class="run-btn" type="button" data-action="addVehicle">Add manually</button>
+                  <button class="run-btn" type="submit" form="vehicle-launch-form">Launch planner</button>
+                </div>
+                <form id="vehicle-launch-form"></form>
               </div>
 
               <div class="control-box">
@@ -80,15 +89,17 @@
               <div class="control-box">
                 <h5>Active Vehicles</h5>
                 <div class="inputRow vehicleList" style="margin-bottom: 8px;"></div>
+                <div id="vehicle-launch-status" role="status"></div>
+                <ul id="launched-vehicles"></ul>
               </div>
             </div>
             <h4>----------------------------------</h4>
             <div class="control-panel">
               <div class="control-box">
-                <h5>Trajectories</h5>
+                <h5>Discover neighbors</h5>
                 <div class="button-row">
-                  <button class="run-btn" type="button" data-action="addTrajectories">Display</button>
-                  <button class="cancel-btn" type="button" data-action="removeTrajectories">Remove</button>
+                  <button class="run-btn" type="button" data-action="startDiscovery">Start</button>
+                  <button class="cancel-btn" type="button" data-action="stopDiscovery">Stop</button>
                 </div>
               </div>
               <div class="control-box">
@@ -96,6 +107,13 @@
                 <div class="button-row">
                   <button class="run-btn" type="button" data-action="runOptimization">Run</button>
                   <button class="cancel-btn" type="button" data-action="cancelOptimization">Cancel</button>
+                </div>
+              </div>
+              <div class="control-box">
+                <h5>Trajectories</h5>
+                <div class="button-row">
+                  <button class="run-btn" type="button" data-action="addTrajectories">Display</button>
+                  <button class="cancel-btn" type="button" data-action="removeTrajectories">Remove</button>
                 </div>
               </div>
             </div>
@@ -235,8 +253,8 @@
       
     </div>
   </div>
-
   <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/vehicle_launcher.js"></script>
 </body>
 
 </html>

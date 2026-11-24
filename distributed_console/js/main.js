@@ -10,9 +10,10 @@ import {
   subscribeToMissionLog,
   subscribePlanningAlive,
   subscribePlannerMissionOutput,
-  subscribeMissionString,
   subscribePlannedTrajectory,
-  subscribeVehicleState
+  subscribeVehicleState,
+  publishDistributedStartStop,
+  setVehicleDiscoveryMode
 } from './ros.js';
 
 import {
@@ -44,7 +45,6 @@ import {
   sendGoalToVehicle,
   sendStateToVehicle,
   sendObstacles,
-  runOptimization,
   cancelOptimization,
   applyChanges,
   loadPlannerConfig,
@@ -137,6 +137,36 @@ function addVehicleAtCenter() {
   setSelectedObstacleInternal(null);
   if (!knownVehicles.includes(id)) knownVehicles.push(id);
   knownVehicles.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  updateVehicleCheckboxUI();
+  setStage('stageOptimization', 'pending');
+  drawScene();
+  saveMapState({ vehicles, obstacles, goals });
+}
+
+function addNamedVehicleAtCenter(name) {
+  if (!name || vehicles[name]) {
+    if (vehicles[name]) {
+      setSelectedVehicleInternal(name);
+      drawScene();
+    }
+    return;
+  }
+
+  vehicles[name] = {
+    E: centerEasting,
+    N: centerNorthing,
+    yaw: 0.0,
+    v: 0.01,
+    color: vehicleColor(name),
+    id: vehicleNumber(name)
+  };
+
+  setSelectedVehicleInternal(name);
+  setSelectedObstacleInternal(null);
+
+  if (!knownVehicles.includes(name)) knownVehicles.push(name);
+  knownVehicles.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
   updateVehicleCheckboxUI();
   setStage('stageOptimization', 'pending');
   drawScene();
@@ -530,35 +560,41 @@ function deployMission() {
   });
 }
 
-function runOptimizationHandler() {
-  const selected = getSelectedVehicles().filter((n) => n in vehicles);
-  runOptimization(selected, {
-    onStarted: () => setStage('stageOptimization', 'running'),
-    onSuccess: (res) => {
-      alert(res.message);
-      setStage('stageOptimization', res.success ? 'success' : 'error');
-    },
-    onError: (err) => {
-      console.error('Optimization failed', err);
-      alert('Optimization service call failed. See console.');
-      setStage('stageOptimization', 'error');
-    },
-    onStage: (state) => setStage('stageOptimization', state)
+async function setDiscoveryForSelectedVehicles(enabled) {
+  const selected = getSelectedVehicles().filter((name) => name in vehicles);
+  if (!selected.length) {
+    addLog('Select at least one active vehicle.');
+    return;
+  }
+
+  const results = await Promise.allSettled(
+    selected.map((name) => setVehicleDiscoveryMode(name, enabled))
+  );
+
+  results.forEach((result, index) => {
+    const name = selected[index];
+    if (result.status === 'fulfilled') {
+      addLog(`Discovery ${enabled ? 'started' : 'stopped'} for ${name}`);
+    } else {
+      console.error(`Discovery update failed for ${name}:`, result.reason);
+      addLog(`Discovery update failed for ${name}: ${result.reason.message}`);
+    }
   });
 }
 
-function cancelOptimizationHandler() {
-  cancelOptimization({
-    onSuccess: (res) => {
-      console.log(res.message);
-      alert(res.message);
-      setStage('stageOptimization', 'error');
-    },
-    onError: (err) => {
-      console.error('Cancel failed', err);
-      alert('Cancel service failed. See console.');
-    }
-  });
+function runOptimizationHandler(start) {
+  const activeNames = getSelectedVehicles()
+    .filter((name) => name in vehicles);
+
+  try {
+    const names = publishDistributedStartStop(activeNames, start);
+    addLog(`Distributed optimization ${start ? 'start' : 'stop'} sent to: ${names.join(', ')}`);
+    setStage('stageOptimization', start ? 'running' : 'pending');
+  } catch (err) {
+    console.error(`Could not ${start ? 'start' : 'stop'} distributed optimization:`, err);
+    addLog(`Optimization ${start ? 'start' : 'stop'} failed: ${err.message}`);
+    setStage('stageOptimization', 'error');
+  }
 }
 
 function loadPlannerConfigHandler() {
@@ -597,6 +633,10 @@ function clearInlineHandlers() {
 }
 
 function initApp() {
+  window.addEventListener('console:add-vehicle', (event) => {
+    addNamedVehicleAtCenter(event.detail?.name);
+  });
+
   rosConnections = initRosConnections();
   initCanvas({
     onClick: handleCanvasClick,
@@ -618,8 +658,10 @@ function initApp() {
     onSendObstacles: sendObstacleData,
     onAddTrajectories: addTrajectoriesForSelectedVehicles,
     onRemoveTrajectories: removeTrajectoriesForSelectedVehicles,
-    onRunOptimization: runOptimizationHandler,
-    onCancelOptimization: cancelOptimizationHandler,
+    onRunOptimization: () => runOptimizationHandler(true),
+    onCancelOptimization: () => runOptimizationHandler(false),
+    onStartDiscovery: () => setDiscoveryForSelectedVehicles(true),
+    onStopDiscovery: () => setDiscoveryForSelectedVehicles(false),
     onStartCPF: () => startCPFForSelectedVehicles(getSelectedVehicles(), {
       onStarted: (vehicle, url) => addLog(`CPF started for ${vehicle} on ${url}`),
       onError: (vehicle, url, err) => console.error(`CPF start failed for ${vehicle}`, err)
